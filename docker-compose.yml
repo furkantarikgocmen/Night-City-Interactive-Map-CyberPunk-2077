@@ -3,6 +3,8 @@ services:
     image: traefik:v3.6
     container_name: night-city-traefik
     restart: unless-stopped
+    profiles:
+      - tls
     command:
       - "--api.dashboard=false"
       - "--providers.docker=true"
@@ -13,7 +15,7 @@ services:
       - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
       - "--entrypoints.websecure.address=:443"
       - "--entrypoints.websecure.http2.maxconcurrentstreams=250"
-      - "--certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL:?Set LETSENCRYPT_EMAIL in .env}"
+      - "--certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL:-admin@example.com}"
       - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
@@ -32,9 +34,11 @@ services:
     depends_on:
       night-city-api:
         condition: service_healthy
+    ports:
+      - "127.0.0.1:8081:80"
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.night-city.rule=Host(`${DOMAIN:?Set DOMAIN in .env}`)"
+      - "traefik.http.routers.night-city.rule=Host(`${DOMAIN:-localhost}`)"
       - "traefik.http.routers.night-city.entrypoints=websecure"
       - "traefik.http.routers.night-city.tls=true"
       - "traefik.http.routers.night-city.tls.certresolver=letsencrypt"

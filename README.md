@@ -26,7 +26,17 @@ The application includes 2,566 locations across 58 marker types, category filter
 - Docker
 - Docker Compose
 
-### Run the application
+### Run locally
+
+No domain or environment file is required for local use:
+
+```bash
+docker compose up --build -d
+```
+
+Open <http://localhost:8081>.
+
+### Run with automatic TLS
 
 Copy the example environment file:
 
@@ -45,6 +55,7 @@ Edit `.env` and set your public hostname and Let's Encrypt account email:
 ```dotenv
 DOMAIN=night-city.example.com
 LETSENCRYPT_EMAIL=you@example.com
+COMPOSE_PROFILES=tls
 ```
 
 Before starting the stack, make sure:
@@ -53,7 +64,7 @@ Before starting the stack, make sure:
 - TCP ports `80` and `443` are reachable from the public internet.
 - No other service on the host is already using ports `80` or `443`.
 
-Start the stack:
+Start the stack with the same command:
 
 ```bash
 docker compose up --build -d
@@ -96,7 +107,7 @@ The existing SQLite volume will be reused.
 | SQLite | Stores found locations and custom markers |
 | Docker Compose | Runs the frontend and API services and manages persistent storage |
 
-Only Traefik exposes host ports. Nginx and the API stay on the private Docker network. The frontend, API, marker data, and marker sprite are served locally. Map tile images are requested from `tiles.mapgenie.io`, so displaying the map background currently requires an internet connection.
+In TLS mode, Traefik exposes public ports `80` and `443`. Nginx also binds to `127.0.0.1:8081` for host-local access, while the API remains available only on the private Docker network. The frontend, API, marker data, and marker sprite are served locally. Map tile images are requested from `tiles.mapgenie.io`, so displaying the map background currently requires an internet connection.
 
 ## Verify TLS and HTTP/2
 
