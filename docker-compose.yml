@@ -51,8 +51,7 @@ services:
     environment:
       DATABASE_PATH: /data/night-city.db
     volumes:
-      - night-city-data:/data
+      - ./data:/data
 
 volumes:
-  night-city-data:
   traefik-certificates:
