@@ -1,4 +1,30 @@
 services:
+  traefik:
+    image: traefik:v3.6
+    container_name: night-city-traefik
+    restart: unless-stopped
+    command:
+      - "--api.dashboard=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.websecure.http2.maxconcurrentstreams=250"
+      - "--certificatesresolvers.letsencrypt.acme.email=${LETSENCRYPT_EMAIL:?Set LETSENCRYPT_EMAIL in .env}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--log.level=INFO"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certificates:/letsencrypt
+
   night-city-map:
     build: .
     container_name: night-city-map
@@ -6,8 +32,13 @@ services:
     depends_on:
       night-city-api:
         condition: service_healthy
-    ports:
-      - "8081:80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.night-city.rule=Host(`${DOMAIN:?Set DOMAIN in .env}`)"
+      - "traefik.http.routers.night-city.entrypoints=websecure"
+      - "traefik.http.routers.night-city.tls=true"
+      - "traefik.http.routers.night-city.tls.certresolver=letsencrypt"
+      - "traefik.http.services.night-city.loadbalancer.server.port=80"
 
   night-city-api:
     build: ./service
@@ -20,3 +51,4 @@ services:
 
 volumes:
   night-city-data:
+  traefik-certificates:

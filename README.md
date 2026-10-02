@@ -14,7 +14,9 @@ The application includes 2,566 locations across 58 marker types, category filter
 - Import and export progress as JSON
 - Persistent SQLite storage instead of browser sessions
 - Single-user, authentication-free setup for personal use
-- Self-hosted with Docker Compose and Nginx
+- Self-hosted with Docker Compose, Traefik, and Nginx
+- Automatic Let's Encrypt TLS certificates and renewal
+- Automatic HTTP-to-HTTPS redirect with HTTP/2 support
 - Responsive desktop and mobile interface
 
 ## Quick start
@@ -26,11 +28,41 @@ The application includes 2,566 locations across 58 marker types, category filter
 
 ### Run the application
 
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+PowerShell equivalent:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Edit `.env` and set your public hostname and Let's Encrypt account email:
+
+```dotenv
+DOMAIN=night-city.example.com
+LETSENCRYPT_EMAIL=you@example.com
+```
+
+Before starting the stack, make sure:
+
+- The domain's `A` and/or `AAAA` record points to this server.
+- TCP ports `80` and `443` are reachable from the public internet.
+- No other service on the host is already using ports `80` or `443`.
+
+Start the stack:
+
 ```bash
 docker compose up --build -d
 ```
 
-Open <http://localhost:8081>.
+Open `https://<your-domain>`. Traefik obtains the certificate from Let's Encrypt, redirects HTTP traffic to HTTPS, renews the certificate automatically, and negotiates HTTP/2 with supported clients.
+
+> [!NOTE]
+> Let's Encrypt does not issue certificates for `localhost`, private IP addresses, or hostnames that are not publicly reachable. A real public domain is required for this HTTP-01 setup.
 
 To stop the application:
 
@@ -38,7 +70,7 @@ To stop the application:
 docker compose down
 ```
 
-Your progress is stored in the `night-city-data` Docker volume and survives container recreation and `docker compose down`.
+Your progress is stored in the `night-city-data` Docker volume. Certificates and ACME account data are stored in the `traefik-certificates` volume. Both survive container recreation and `docker compose down`.
 
 > [!WARNING]
 > Running `docker compose down -v` also removes the SQLite volume and all saved progress. Export a JSON backup first if you need to preserve it.
@@ -58,12 +90,27 @@ The existing SQLite volume will be reused.
 
 | Component | Purpose |
 | --- | --- |
-| Nginx | Serves the frontend and proxies `/api` requests |
+| Traefik | Terminates TLS, obtains and renews Let's Encrypt certificates, redirects HTTP to HTTPS, and serves HTTP/2 |
+| Nginx | Serves the frontend and proxies `/api` requests on the private Docker network |
 | Python service | Provides the small REST API using only the Python standard library |
 | SQLite | Stores found locations and custom markers |
 | Docker Compose | Runs the frontend and API services and manages persistent storage |
 
-The frontend, API, marker data, and marker sprite are served locally. Map tile images are requested from `tiles.mapgenie.io`, so displaying the map background currently requires an internet connection.
+Only Traefik exposes host ports. Nginx and the API stay on the private Docker network. The frontend, API, marker data, and marker sprite are served locally. Map tile images are requested from `tiles.mapgenie.io`, so displaying the map background currently requires an internet connection.
+
+## Verify TLS and HTTP/2
+
+After Let's Encrypt has issued the certificate:
+
+```bash
+curl -I --http2 https://night-city.example.com
+```
+
+The status line should report HTTP/2. Certificate events can be inspected with:
+
+```bash
+docker compose logs traefik
+```
 
 ## API
 
