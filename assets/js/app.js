@@ -379,7 +379,7 @@
         .setView([data.map.initialLat, data.map.initialLng], Math.min(data.map.maxZoom, data.map.initialZoom + 2));
       map.setMaxBounds([[0.25, -1.12], [1.08, -0.28]]);
       tileLayers = data.map.tilesets.map((url, index) => L.tileLayer(url, {
-        minZoom: data.map.minZoom, maxZoom: data.map.maxZoom, maxNativeZoom: data.map.maxZoom,
+        minZoom: data.map.minZoom, maxZoom: data.map.maxZoom, maxNativeZoom: data.map.maxNativeZoom,
         noWrap: true, keepBuffer: 3, attribution: index === 0 ? "Map tiles © MapGenie" : "Satellite tiles © MapGenie"
       }));
       displayLayer = L.layerGroup().addTo(map);
