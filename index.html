@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#111318" />
+  <title>Cyberpunk 2077 — Night City Map</title>
+  <link rel="stylesheet" href="vendor/leaflet.css" />
+  <link rel="stylesheet" href="styles.css?v=6" />
+</head>
+<body>
+  <div id="app">
+    <header class="mobile-bar">
+      <button id="menuButton" class="icon-btn" aria-label="Filtreleri aç">☰</button>
+      <strong>NIGHT CITY MAP</strong>
+      <button id="mobileSearchButton" class="icon-btn" aria-label="Ara">⌕</button>
+    </header>
+
+    <aside id="sidebar" class="sidebar" aria-label="Harita filtreleri">
+      <div class="sidebar-header">
+        <div>
+          <span class="game-label">CYBERPUNK 2077</span>
+          <h1>Night City Map</h1>
+        </div>
+        <button id="closeSidebar" class="icon-btn mobile-only" aria-label="Filtreleri kapat">×</button>
+      </div>
+
+      <label class="search-box">
+        <span>⌕</span>
+        <input id="searchInput" type="search" placeholder="Search locations…" autocomplete="off" />
+        <kbd>/</kbd>
+      </label>
+
+      <section class="progress-panel">
+        <div><strong id="foundCount">0</strong><span id="totalCount"> / 0 found</span></div>
+        <div class="progress-track"><span id="progressBar"></span></div>
+        <button id="hideFoundButton" class="link-button">Hide found locations</button>
+      </section>
+
+      <div class="sidebar-tools">
+        <button id="showAllButton">Show all</button>
+        <button id="hideAllButton">Hide all</button>
+      </div>
+
+      <div id="filters" class="filters" aria-live="polite">
+        <div class="loading">Reading map data…</div>
+      </div>
+
+      <footer class="sidebar-footer">
+        <button id="addMarkerButton">＋ Add custom marker</button>
+        <button id="dataButton">Import / Export</button>
+      </footer>
+    </aside>
+
+    <main class="map-shell">
+      <div id="map" aria-label="Night City interactive map"></div>
+      <div class="map-topbar">
+        <div class="layer-switch" role="group" aria-label="Harita katmanı">
+          <button id="defaultLayerButton" class="active">Map</button>
+          <button id="satelliteLayerButton">Satellite</button>
+        </div>
+        <span id="visibleLabel" class="visible-label">0 locations</span>
+      </div>
+      <div id="addHint" class="add-hint" hidden>Click anywhere on the map · ESC to cancel</div>
+
+      <article id="details" class="details" hidden>
+        <button id="closeDetails" class="details-close" aria-label="Detayı kapat">×</button>
+        <div id="detailIcon" class="detail-icon"></div>
+        <div class="details-copy">
+          <span id="detailCategory" class="detail-category"></span>
+          <h2 id="detailName"></h2>
+          <dl>
+            <div><dt>Coordinates</dt><dd id="detailCoordinates"></dd></div>
+            <div><dt>Region ID</dt><dd id="detailRegion"></dd></div>
+          </dl>
+          <div class="detail-actions">
+            <button id="foundButton" class="primary-button">Mark as found</button>
+            <button id="editCustomButton" hidden>Edit</button>
+            <button id="deleteCustomButton" class="danger-button" hidden>Delete</button>
+          </div>
+        </div>
+      </article>
+    </main>
+  </div>
+
+  <dialog id="markerDialog">
+    <form id="markerForm">
+      <div class="dialog-header"><div><span class="game-label">CUSTOM LOCATION</span><h2 id="markerDialogTitle">Add marker</h2></div><button type="button" class="icon-btn" data-close="markerDialog">×</button></div>
+      <input id="customId" type="hidden" />
+      <label>Name<input id="customName" required maxlength="100" /></label>
+      <label>Category<select id="customType" required></select></label>
+      <div class="coordinates-row"><label>Latitude<input id="customLat" type="number" step="any" required /></label><label>Longitude<input id="customLng" type="number" step="any" required /></label></div>
+      <label>Notes<textarea id="customNotes" rows="3" maxlength="500"></textarea></label>
+      <div class="dialog-actions"><button type="button" data-close="markerDialog">Cancel</button><button class="primary-button" type="submit">Save marker</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="dataDialog">
+    <div class="dialog-header"><div><span class="game-label">LOCAL DATA</span><h2>Import / Export</h2></div><button type="button" class="icon-btn" data-close="dataDialog">×</button></div>
+    <p>Found progress and custom markers are stored in the local SQLite database.</p>
+    <div class="data-actions">
+      <button id="exportButton" class="primary-button">Export JSON</button>
+      <label class="file-button">Import JSON<input id="importInput" type="file" accept="application/json" /></label>
+      <button id="resetFoundButton" class="danger-button">Reset found progress</button>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="vendor/leaflet.js"></script>
+  <script src="app.js?v=5"></script>
+</body>
+</html>

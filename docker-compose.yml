@@ -1,0 +1,22 @@
+services:
+  night-city-map:
+    build: .
+    container_name: night-city-map
+    restart: unless-stopped
+    depends_on:
+      night-city-api:
+        condition: service_healthy
+    ports:
+      - "8081:80"
+
+  night-city-api:
+    build: ./service
+    container_name: night-city-api
+    restart: unless-stopped
+    environment:
+      DATABASE_PATH: /data/night-city.db
+    volumes:
+      - night-city-data:/data
+
+volumes:
+  night-city-data:
