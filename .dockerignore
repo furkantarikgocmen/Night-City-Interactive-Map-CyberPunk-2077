@@ -4,4 +4,5 @@
 .env.*
 README.md
 docker-compose.yml
+docs
 service

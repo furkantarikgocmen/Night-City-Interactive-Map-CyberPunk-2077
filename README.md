@@ -4,6 +4,16 @@ A self-hosted interactive map for Cyberpunk 2077 collectors who want to track ev
 
 The application includes 2,566 locations across 58 marker types, category filters, text search, standard and satellite map layers, persistent found status, custom markers, and JSON backup/restore.
 
+## Screenshots
+
+### Standard map and category filters
+
+![Night City standard map with category filters](docs/screenshots/map-view.png)
+
+### Satellite layer and found-location tracking
+
+![Night City satellite map with a found iconic weapon](docs/screenshots/satellite-view.png)
+
 ## Features
 
 - Interactive Night City map with standard and satellite layers
@@ -74,6 +84,24 @@ Open `https://<your-domain>`. Traefik obtains the certificate from Let's Encrypt
 
 > [!NOTE]
 > Let's Encrypt does not issue certificates for `localhost`, private IP addresses, or hostnames that are not publicly reachable. A real public domain is required for this HTTP-01 setup.
+
+### Docker Compose profiles
+
+The default Compose profile starts only the application and SQLite API for local use on `localhost:8081`. Traefik belongs to the optional `tls` profile.
+
+Setting the following value in `.env` activates that profile automatically whenever you run the normal Compose command:
+
+```dotenv
+COMPOSE_PROFILES=tls
+```
+
+You can also activate it explicitly without setting `COMPOSE_PROFILES`:
+
+```bash
+docker compose --profile tls up --build -d
+```
+
+When the `tls` profile is active, `DOMAIN` and `LETSENCRYPT_EMAIL` must contain real production values.
 
 To stop the application:
 
