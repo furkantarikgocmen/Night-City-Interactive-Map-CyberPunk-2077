@@ -349,7 +349,7 @@
   async function initialize() {
     try {
       const [mapFile, mapState, customState] = await Promise.all([
-        fetch("map-data.json?v=5").then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); }),
+        fetch("assets/data/map-data.json?v=6").then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); }),
         apiFetch(`/api/v1/user/map-data/${MAP_ID}`),
         apiFetch(`/api/v1/user/custom-markers?mapId=${MAP_ID}`)
       ]);
