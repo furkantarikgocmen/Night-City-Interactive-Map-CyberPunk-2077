@@ -20,6 +20,8 @@
   let tileLayers;
   let regionLayer;
   let displayLayer;
+  let detailPopup;
+  let focusRequest = 0;
   let typeBySlug = new Map();
   let entries = [];
   let entryById = new Map();
@@ -91,7 +93,11 @@
 
   function createEntry(item) {
     const marker = L.marker([item.lat, item.lng], { icon: markerIcon(item), title: item.name, riseOnHover: true });
-    marker.on("click", () => openDetails(item.id));
+    marker.on("click", () => {
+      focusRequest += 1;
+      map.stop();
+      openDetails(item.id);
+    });
     return { item, marker };
   }
 
@@ -319,11 +325,19 @@
       renderMarkers();
     }
 
+    const request = ++focusRequest;
+    const target = L.latLng(entry.item.lat, entry.item.lng);
     const currentZoom = map.getZoom();
-    const nativeZoomLimit = data.map.maxNativeZoom || data.map.maxZoom;
-    const focusZoom = Math.max(currentZoom, Math.min(nativeZoomLimit, currentZoom + 2));
-    map.flyTo([entry.item.lat, entry.item.lng], focusZoom, { duration: 0.55 });
-    openDetails(entry.item.id);
+    if (detailPopup && map.hasLayer(detailPopup)) map.closePopup(detailPopup);
+    const showTarget = () => {
+      if (request === focusRequest) openDetails(entry.item.id);
+    };
+    if (map.getCenter().equals(target)) {
+      showTarget();
+    } else {
+      map.once("moveend", showTarget);
+      map.flyTo(target, currentZoom, { duration: 0.55 });
+    }
   }
 
   function openDetails(id) {
@@ -331,26 +345,34 @@
     if (!item) return;
     selectedId = id;
     const type = typeBySlug.get(item.type) || typeBySlug.get("custom");
-    $("#detailIcon").innerHTML = sidebarIcon(type);
-    $("#detailCategory").textContent = type.name;
-    $("#detailName").textContent = item.name;
-    $("#detailCoordinates").textContent = `${item.lat.toFixed(7)}, ${item.lng.toFixed(7)}`;
-    $("#detailRegion").textContent = item.regionId ?? "—";
+    const detailElement = selector => elements.details.querySelector(selector);
+    detailElement("#detailIcon").innerHTML = sidebarIcon(type);
+    detailElement("#detailCategory").textContent = type.name;
+    detailElement("#detailName").textContent = item.name;
+    detailElement("#detailCoordinates").textContent = `${item.lat.toFixed(7)}, ${item.lng.toFixed(7)}`;
+    detailElement("#detailRegion").textContent = item.regionId ?? "—";
     const detail = item.custom ? null : locationDetails[String(item.slug)];
     const description = item.custom ? item.notes : detail?.description;
-    const descriptionElement = $("#detailDescription");
+    const descriptionElement = detailElement("#detailDescription");
     descriptionElement.innerHTML = renderMarkdown(description || "");
     descriptionElement.hidden = !description?.trim();
     const isFound = found.has(progressKey(item));
-    $("#foundButton").textContent = isFound ? "Found ✓" : "Mark as found";
-    $("#foundButton").classList.toggle("is-found", isFound);
-    $("#editCustomButton").hidden = !item.custom;
-    $("#deleteCustomButton").hidden = !item.custom;
+    detailElement("#foundButton").textContent = isFound ? "Found ✓" : "Mark as found";
+    detailElement("#foundButton").classList.toggle("is-found", isFound);
+    detailElement("#editCustomButton").hidden = !item.custom;
+    detailElement("#deleteCustomButton").hidden = !item.custom;
     elements.details.hidden = false;
     elements.details.scrollTop = 0;
+    const markerHeight = item.custom ? 39 : type?.icon?.height || 44;
+    detailPopup.options.offset = L.point(0, -(markerHeight + 3));
+    detailPopup
+      .setLatLng([item.lat, item.lng])
+      .setContent(elements.details)
+      .openOn(map);
   }
 
   function closeDetails() {
+    if (detailPopup && map.hasLayer(detailPopup)) map.closePopup(detailPopup);
     selectedId = null;
     elements.details.hidden = true;
   }
@@ -360,7 +382,7 @@
     const item = getItem(selectedId);
     const key = progressKey(item);
     const wasFound = found.has(key);
-    const button = $("#foundButton");
+    const button = elements.details.querySelector("#foundButton");
     button.disabled = true;
     try {
       await apiFetch(`/api/v1/user/locations/${encodeURIComponent(key)}`, {
@@ -492,7 +514,7 @@
     elements.hideFound.addEventListener("click", () => { state.hideFound = !state.hideFound; savePreferences(); renderMarkers(); });
     $("#defaultLayerButton").addEventListener("click", () => setLayer(0));
     $("#satelliteLayerButton").addEventListener("click", () => setLayer(1));
-    $("#closeDetails").addEventListener("click", closeDetails);
+    $("#closeDetails").addEventListener("click", () => { focusRequest += 1; closeDetails(); });
     $("#detailDescription").addEventListener("click", event => {
       const link = event.target.closest("[data-location-id]");
       if (link) focusLocation(link.dataset.locationId);
@@ -552,6 +574,21 @@
       map = L.map("map", { minZoom: data.map.minZoom, maxZoom: data.map.maxZoom, zoomControl: true, preferCanvas: true })
         .setView([data.map.initialLat, data.map.initialLng], Math.min(data.map.maxZoom, data.map.initialZoom + 2));
       map.setMaxBounds([[0.25, -1.12], [1.08, -0.28]]);
+      detailPopup = L.popup({
+        className: "location-popup",
+        closeButton: false,
+        closeOnClick: true,
+        autoPan: true,
+        keepInView: true,
+        minWidth: 280,
+        maxWidth: 460,
+        autoPanPadding: [24, 24]
+      });
+      map.on("popupclose", event => {
+        if (event.popup !== detailPopup) return;
+        selectedId = null;
+        elements.details.hidden = true;
+      });
       map.createPane("regionBorders");
       map.getPane("regionBorders").style.zIndex = "350";
       map.getPane("regionBorders").style.pointerEvents = "none";
