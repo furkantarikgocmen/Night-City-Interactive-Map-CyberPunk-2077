@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#111318" />
   <title>Cyberpunk 2077 — Night City Map</title>
   <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css" />
-  <link rel="stylesheet" href="assets/css/styles.css?v=8" />
+  <link rel="stylesheet" href="assets/css/styles.css?v=9" />
 </head>
 <body>
   <div id="app">
@@ -69,15 +69,16 @@
         <div class="details-copy">
           <span id="detailCategory" class="detail-category"></span>
           <h2 id="detailName"></h2>
-          <dl>
-            <div><dt>Coordinates</dt><dd id="detailCoordinates"></dd></div>
-            <div><dt>Region ID</dt><dd id="detailRegion"></dd></div>
-          </dl>
-          <div class="detail-actions">
-            <button id="foundButton" class="primary-button">Mark as found</button>
-            <button id="editCustomButton" hidden>Edit</button>
-            <button id="deleteCustomButton" class="danger-button" hidden>Delete</button>
-          </div>
+        </div>
+        <div id="detailDescription" class="detail-description" hidden></div>
+        <dl class="detail-meta">
+          <div><dt>Coordinates</dt><dd id="detailCoordinates"></dd></div>
+          <div><dt>Region ID</dt><dd id="detailRegion"></dd></div>
+        </dl>
+        <div class="detail-actions">
+          <button id="foundButton" class="primary-button">Mark as found</button>
+          <button id="editCustomButton" hidden>Edit</button>
+          <button id="deleteCustomButton" class="danger-button" hidden>Delete</button>
         </div>
       </article>
     </main>
@@ -107,6 +108,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="assets/vendor/leaflet/leaflet.js"></script>
-  <script src="assets/js/app.js?v=6"></script>
+  <script src="assets/js/app.js?v=8"></script>
 </body>
 </html>

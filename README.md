@@ -2,7 +2,7 @@
 
 A self-hosted interactive map for Cyberpunk 2077 collectors who want to track everything they discover across Night City without a subscription or an arbitrary found-item limit.
 
-The application includes 2,566 locations across 58 marker types, category filters, text search, standard and satellite map layers, persistent found status, custom markers, and JSON backup/restore.
+The application includes 2,577 locations across 52 marker types, rich location descriptions with cross-map navigation, category filters, text search, standard and satellite map layers, persistent found status, custom markers, and JSON backup/restore.
 
 ## Screenshots
 
@@ -17,7 +17,8 @@ The application includes 2,566 locations across 58 marker types, category filter
 ## Features
 
 - Interactive Night City map with standard and satellite layers
-- 2,566 built-in locations organized into 58 marker types
+- 2,577 built-in locations organized into 52 marker types
+- Rich location descriptions and clickable links between related locations
 - Search and category filters
 - Unlimited found-location tracking
 - Add, edit, and delete personal map markers
@@ -125,12 +126,50 @@ docker compose up --build -d
 
 The existing SQLite volume will be reused.
 
+### Refresh the bundled map data
+
+The dependency-free updater downloads the public Night City page and map-data response directly from MapGenie. No browser export, HAR file, cookies, or account credentials are needed.
+
+Validate the current upstream data without changing any files:
+
+```bash
+python3 tools/update_mapgenie_data.py --check
+```
+
+Regenerate the bundled files:
+
+```bash
+python3 tools/update_mapgenie_data.py
+```
+
+If Python is not installed on the host, use the project's API image:
+
+```bash
+docker compose run --rm --no-deps \
+  -v "$PWD:/work" -w /work night-city-api \
+  python tools/update_mapgenie_data.py --check
+```
+
+The updater reads configuration and sprite metadata embedded in:
+
+```text
+https://mapgenie.io/cyberpunk-2077/maps/night-city
+```
+
+and location data from:
+
+```text
+https://mapgenie.io/api/v1/maps/115/data
+```
+
+It deterministically regenerates `assets/data/map-data.json` and `assets/data/location-details.json`. This includes map settings, categories, sprite positions, markers, descriptions, related-location links, tags, and media metadata. Premium categories are excluded, invalid or inconsistent responses fail before replacing existing data, and unchanged output is not rewritten. The default source URLs are declared at the top of the script and can also be overridden with `--page-url` and `--data-url`.
+
 ## Architecture
 
 | Component | Purpose |
 | --- | --- |
 | Traefik | Terminates TLS, obtains and renews Let's Encrypt certificates, redirects HTTP to HTTPS, and serves HTTP/2 |
-| Nginx | Serves the frontend and proxies `/api` requests on the private Docker network |
+| Nginx | Serves the frontend, local map details, and marker data, and proxies `/api` requests on the private Docker network |
 | Python service | Provides the small REST API using only the Python standard library |
 | SQLite | Stores found locations and custom markers |
 | Docker Compose | Runs the frontend and API services and manages persistent storage |

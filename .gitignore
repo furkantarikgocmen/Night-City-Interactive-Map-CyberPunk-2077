@@ -4,6 +4,7 @@
 .env
 __pycache__/
 *.py[cod]
+*.har
 .DS_Store
 Thumbs.db
 .idea/

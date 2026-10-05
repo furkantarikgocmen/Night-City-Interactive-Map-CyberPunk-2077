@@ -2,6 +2,12 @@
 .gitignore
 .env
 .env.*
+*.har
+*.db
+*.db-shm
+*.db-wal
+__pycache__/
+*.py[cod]
 README.md
 docker-compose.yml
 docs

@@ -15,11 +15,14 @@
   };
 
   let data;
+  let locationDetails = {};
   let map;
   let tileLayers;
   let displayLayer;
   let typeBySlug = new Map();
   let entries = [];
+  let entryById = new Map();
+  let entryBySlug = new Map();
   let activeTypes = new Set();
   let found = new Set();
   let selectedId = null;
@@ -94,6 +97,8 @@
   function refreshEntries() {
     const customItems = state.custom.map(item => ({ ...item, custom: true, type: item.type || "custom" }));
     entries = [...data.markers, ...customItems].map(createEntry);
+    entryById = new Map(entries.map(entry => [String(entry.item.id), entry]));
+    entryBySlug = new Map(entries.filter(entry => !entry.item.custom).map(entry => [String(entry.item.slug), entry]));
   }
 
   function isVisible(item, query) {
@@ -157,12 +162,113 @@
 
   function escapeHtml(value = "") {
     const span = document.createElement("span");
-    span.textContent = value;
+    span.textContent = String(value);
     return span.innerHTML;
   }
 
+  function escapeAttribute(value = "") {
+    return escapeHtml(value).replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+  }
+
+  function renderInlineMarkdown(value) {
+    const pattern = /\[([^\]]+)]\(([^)\s]+)\)|\*\*([^*]+)\*\*|_([^_\n]+)_|\*([^*\n]+)\*/g;
+    let html = "";
+    let cursor = 0;
+    for (const match of value.matchAll(pattern)) {
+      html += escapeHtml(value.slice(cursor, match.index));
+      if (match[1] !== undefined) {
+        const label = escapeHtml(match[1]);
+        const localMatch = match[2].match(/[?&]locationIds?=(\d+)/);
+        if (localMatch) {
+          html += `<button type="button" class="location-link" data-location-id="${localMatch[1]}">${label}</button>`;
+        } else {
+          try {
+            const url = new URL(match[2], window.location.origin);
+            html += ["http:", "https:"].includes(url.protocol)
+              ? `<a href="${escapeAttribute(url.href)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+              : label;
+          } catch {
+            html += label;
+          }
+        }
+      } else if (match[3] !== undefined) {
+        html += `<strong>${escapeHtml(match[3])}</strong>`;
+      } else {
+        html += `<em>${escapeHtml(match[4] ?? match[5])}</em>`;
+      }
+      cursor = match.index + match[0].length;
+    }
+    return html + escapeHtml(value.slice(cursor));
+  }
+
+  function renderMarkdown(markdown = "") {
+    const lines = String(markdown).replaceAll("\r", "").split("\n");
+    const output = [];
+    let paragraph = [];
+    let list = [];
+    const flushParagraph = () => {
+      if (!paragraph.length) return;
+      output.push(`<p>${paragraph.map(renderInlineMarkdown).join("<br>")}</p>`);
+      paragraph = [];
+    };
+    const flushList = () => {
+      if (!list.length) return;
+      output.push(`<ul>${list.map(item => `<li>${renderInlineMarkdown(item)}</li>`).join("")}</ul>`);
+      list = [];
+    };
+    for (const rawLine of lines) {
+      const bullet = rawLine.match(/^\s*[-*]\s+(.+)$/);
+      if (bullet) {
+        flushParagraph();
+        list.push(bullet[1]);
+      } else if (!rawLine.trim()) {
+        flushParagraph();
+        flushList();
+      } else {
+        flushList();
+        paragraph.push(rawLine.trim());
+      }
+    }
+    flushParagraph();
+    flushList();
+    return output.join("");
+  }
+
   function getItem(id) {
-    return entries.find(entry => entry.item.id === id)?.item;
+    return entryById.get(String(id))?.item;
+  }
+
+  function focusLocation(locationId) {
+    const entry = entryBySlug.get(String(locationId));
+    if (!entry) {
+      showToast(`Location ${locationId} is not available in this map`);
+      return;
+    }
+
+    let filtersChanged = false;
+    if (!activeTypes.has(entry.item.type)) {
+      activeTypes.add(entry.item.type);
+      filtersChanged = true;
+    }
+    if (state.hideFound && found.has(progressKey(entry.item))) {
+      state.hideFound = false;
+      filtersChanged = true;
+    }
+    if (elements.search.value) {
+      elements.search.value = "";
+      filtersChanged = true;
+    }
+    if (filtersChanged) {
+      savePreferences();
+      renderFilters();
+      renderMarkers();
+    }
+
+    const currentZoom = map.getZoom();
+    const nativeZoomLimit = data.map.maxNativeZoom || data.map.maxZoom;
+    const focusZoom = Math.max(currentZoom, Math.min(nativeZoomLimit, currentZoom + 2));
+    map.flyTo([entry.item.lat, entry.item.lng], focusZoom, { duration: 0.55 });
+    openDetails(entry.item.id);
   }
 
   function openDetails(id) {
@@ -175,12 +281,18 @@
     $("#detailName").textContent = item.name;
     $("#detailCoordinates").textContent = `${item.lat.toFixed(7)}, ${item.lng.toFixed(7)}`;
     $("#detailRegion").textContent = item.regionId ?? "—";
+    const detail = item.custom ? null : locationDetails[String(item.slug)];
+    const description = item.custom ? item.notes : detail?.description;
+    const descriptionElement = $("#detailDescription");
+    descriptionElement.innerHTML = renderMarkdown(description || "");
+    descriptionElement.hidden = !description?.trim();
     const isFound = found.has(progressKey(item));
     $("#foundButton").textContent = isFound ? "Found ✓" : "Mark as found";
     $("#foundButton").classList.toggle("is-found", isFound);
     $("#editCustomButton").hidden = !item.custom;
     $("#deleteCustomButton").hidden = !item.custom;
     elements.details.hidden = false;
+    elements.details.scrollTop = 0;
   }
 
   function closeDetails() {
@@ -325,6 +437,10 @@
     $("#defaultLayerButton").addEventListener("click", () => setLayer(0));
     $("#satelliteLayerButton").addEventListener("click", () => setLayer(1));
     $("#closeDetails").addEventListener("click", closeDetails);
+    $("#detailDescription").addEventListener("click", event => {
+      const link = event.target.closest("[data-location-id]");
+      if (link) focusLocation(link.dataset.locationId);
+    });
     $("#foundButton").addEventListener("click", toggleFound);
     $("#addMarkerButton").addEventListener("click", beginAddMode);
     $("#editCustomButton").addEventListener("click", () => openMarkerDialog(getItem(selectedId)));
@@ -348,12 +464,14 @@
 
   async function initialize() {
     try {
-      const [mapFile, mapState, customState] = await Promise.all([
-        fetch("assets/data/map-data.json?v=6").then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); }),
+      const [mapFile, detailsFile, mapState, customState] = await Promise.all([
+        fetch("assets/data/map-data.json?v=7").then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); }),
+        fetch("assets/data/location-details.json?v=1").then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); }),
         apiFetch(`/api/v1/user/map-data/${MAP_ID}`),
         apiFetch(`/api/v1/user/custom-markers?mapId=${MAP_ID}`)
       ]);
       data = mapFile;
+      locationDetails = detailsFile;
       found = new Set(Object.keys(mapState.locations || {}));
       state.custom = customState.markers || [];
 
