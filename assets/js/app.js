@@ -328,19 +328,27 @@
     const request = ++focusRequest;
     const target = L.latLng(entry.item.lat, entry.item.lng);
     const currentZoom = map.getZoom();
+    const targetPoint = map.latLngToContainerPoint(target);
+    const mapSize = map.getSize();
+    const proximityTolerance = 100;
+    const isNearby =
+      targetPoint.x >= -proximityTolerance &&
+      targetPoint.y >= -proximityTolerance &&
+      targetPoint.x <= mapSize.x + proximityTolerance &&
+      targetPoint.y <= mapSize.y + proximityTolerance;
     if (detailPopup && map.hasLayer(detailPopup)) map.closePopup(detailPopup);
     const showTarget = () => {
       if (request === focusRequest) openDetails(entry.item.id);
     };
-    if (map.getCenter().equals(target)) {
-      showTarget();
+    if (isNearby) {
+      if (request === focusRequest) openDetails(entry.item.id, { autoPan: false });
     } else {
       map.once("moveend", showTarget);
       map.flyTo(target, currentZoom, { duration: 0.55 });
     }
   }
 
-  function openDetails(id) {
+  function openDetails(id, { autoPan = true } = {}) {
     const item = getItem(id);
     if (!item) return;
     selectedId = id;
@@ -364,6 +372,7 @@
     elements.details.hidden = false;
     elements.details.scrollTop = 0;
     const markerHeight = item.custom ? 39 : type?.icon?.height || 44;
+    detailPopup.options.autoPan = autoPan;
     detailPopup.options.offset = L.point(0, -(markerHeight + 3));
     detailPopup
       .setLatLng([item.lat, item.lng])
@@ -517,7 +526,10 @@
     $("#closeDetails").addEventListener("click", () => { focusRequest += 1; closeDetails(); });
     $("#detailDescription").addEventListener("click", event => {
       const link = event.target.closest("[data-location-id]");
-      if (link) focusLocation(link.dataset.locationId);
+      if (!link) return;
+      event.preventDefault();
+      event.stopPropagation();
+      focusLocation(link.dataset.locationId);
     });
     $("#foundButton").addEventListener("click", toggleFound);
     $("#addMarkerButton").addEventListener("click", beginAddMode);
@@ -579,7 +591,7 @@
         closeButton: false,
         closeOnClick: true,
         autoPan: true,
-        keepInView: true,
+        keepInView: false,
         minWidth: 280,
         maxWidth: 460,
         autoPanPadding: [24, 24]
