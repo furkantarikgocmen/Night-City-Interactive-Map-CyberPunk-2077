@@ -18,6 +18,7 @@
   let locationDetails = {};
   let map;
   let tileLayers;
+  let regionLayer;
   let displayLayer;
   let typeBySlug = new Map();
   let entries = [];
@@ -122,6 +123,60 @@
     }
     elements.visibleLabel.textContent = `${visible.toLocaleString("en-US")} locations`;
     renderProgress();
+  }
+
+  function safeCssColor(value, fallback) {
+    return /^#[0-9a-f]{3,8}$/i.test(value || "") ? value : fallback;
+  }
+
+  function renderRegions() {
+    if (!regionLayer) return;
+    regionLayer.clearLayers();
+    const regions = data.regions || [];
+    const parentIds = new Set(regions.map(region => region.parentId).filter(id => id !== null && id !== undefined));
+    const showSubregions = map.getZoom() >= (data.map.regionDetailZoom || 13);
+    const visibleRegions = regions.filter(region => showSubregions
+      ? region.parentId !== null && region.parentId !== undefined || !parentIds.has(region.id)
+      : region.parentId === null || region.parentId === undefined);
+    const labels = [];
+
+    for (const region of visibleRegions) {
+      const isSubregion = region.parentId !== null && region.parentId !== undefined;
+      const color = safeCssColor(region.color, "#fcee0a");
+      const geometryLayer = L.geoJSON({ type: "FeatureCollection", features: region.features || [] }, {
+        pane: "regionBorders",
+        interactive: false,
+        style: {
+          color,
+          weight: isSubregion ? 1.5 : 2,
+          opacity: 0.92,
+          fill: false,
+          lineCap: "round",
+          lineJoin: "round"
+        }
+      }).addTo(regionLayer);
+      const bounds = geometryLayer.getBounds();
+      if (!bounds.isValid()) continue;
+      const center = region.center
+        ? L.latLng(region.center.lat, region.center.lng)
+        : bounds.getCenter();
+      labels.push({ region, center, isSubregion });
+    }
+
+    for (const { region, center, isSubregion } of labels) {
+      const color = safeCssColor(region.textColor, "#eeeddf");
+      const halo = safeCssColor(region.haloColor, "#111318");
+      const size = isSubregion
+        ? Math.min(17, 12 + Math.max(0, map.getZoom() - 13))
+        : Math.min(18, 11 + Math.max(0, map.getZoom() - 10) * 2);
+      const icon = L.divIcon({
+        className: "region-label-icon",
+        html: `<span class="region-label ${isSubregion ? "is-subregion" : "is-region"}" style="--region-label-color:${color};--region-label-halo:${halo};--region-label-size:${size}px">${escapeHtml(region.name.toLocaleUpperCase("en-US"))}</span>`,
+        iconSize: [240, 72],
+        iconAnchor: [120, 36]
+      });
+      L.marker(center, { icon, pane: "regionLabels", interactive: false, keyboard: false }).addTo(regionLayer);
+    }
   }
 
   function renderProgress() {
@@ -426,6 +481,7 @@
   }
 
   function bindEvents() {
+    map.on("zoomend", renderRegions);
     elements.search.addEventListener("input", renderMarkers);
     document.addEventListener("keydown", event => {
       if (event.key === "/" && !["INPUT","TEXTAREA","SELECT"].includes(document.activeElement.tagName)) { event.preventDefault(); elements.search.focus(); }
@@ -465,7 +521,7 @@
   async function initialize() {
     try {
       const [mapFile, detailsFile, mapState, customState] = await Promise.all([
-        fetch("assets/data/map-data.json?v=7").then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); }),
+        fetch("assets/data/map-data.json?v=8").then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); }),
         fetch("assets/data/location-details.json?v=1").then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); }),
         apiFetch(`/api/v1/user/map-data/${MAP_ID}`),
         apiFetch(`/api/v1/user/custom-markers?mapId=${MAP_ID}`)
@@ -496,16 +552,23 @@
       map = L.map("map", { minZoom: data.map.minZoom, maxZoom: data.map.maxZoom, zoomControl: true, preferCanvas: true })
         .setView([data.map.initialLat, data.map.initialLng], Math.min(data.map.maxZoom, data.map.initialZoom + 2));
       map.setMaxBounds([[0.25, -1.12], [1.08, -0.28]]);
+      map.createPane("regionBorders");
+      map.getPane("regionBorders").style.zIndex = "350";
+      map.getPane("regionBorders").style.pointerEvents = "none";
+      map.createPane("regionLabels");
+      map.getPane("regionLabels").style.zIndex = "360";
+      map.getPane("regionLabels").style.pointerEvents = "none";
       tileLayers = data.map.tilesets.map((url, index) => L.tileLayer(url, {
         minZoom: data.map.minZoom, maxZoom: data.map.maxZoom, maxNativeZoom: data.map.maxNativeZoom,
         noWrap: true, keepBuffer: 3, attribution: index === 0 ? "Map tiles © MapGenie" : "Satellite tiles © MapGenie"
       }));
+      regionLayer = L.layerGroup().addTo(map);
       displayLayer = L.layerGroup().addTo(map);
       setLayer(Number(state.layer) === 1 ? 1 : 0);
       refreshEntries();
 
       $("#customType").innerHTML = `<option value="custom">Custom marker</option>${leafTypes.map(type => `<option value="${type.slug}">${escapeHtml(type.name)}</option>`).join("")}`;
-      renderFilters(); renderMarkers(); bindEvents();
+      renderFilters(); renderRegions(); renderMarkers(); bindEvents();
     } catch (error) {
       elements.filters.innerHTML = `<div class="loading">Map data could not be loaded: ${escapeHtml(error.message)}</div>`;
       console.error(error);

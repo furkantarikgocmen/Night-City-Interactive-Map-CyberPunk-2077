@@ -25,6 +25,7 @@ GAME_SLUG = "cyberpunk-2077"
 MAP_PAGE_URL = f"https://mapgenie.io/{GAME_SLUG}/maps/{MAP_SLUG}"
 MAP_DATA_URL = f"https://mapgenie.io/api/v1/maps/{MAP_ID}/data"
 LOCATION_LINK_RE = re.compile(r"[?&]locationIds?=(\d+)")
+HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{3,8}$")
 REQUEST_HEADERS = {
     "Accept-Encoding": "identity",
     "Accept-Language": "en-US,en;q=0.9",
@@ -142,6 +143,74 @@ def sanitize_media(media: object) -> list[dict]:
     return result
 
 
+def sanitize_color(value: object, fallback: str) -> str:
+    return value if isinstance(value, str) and HEX_COLOR_RE.fullmatch(value) else fallback
+
+
+def normalize_regions(api_payload: dict) -> list[dict]:
+    source_regions = api_payload.get("regions")
+    if not isinstance(source_regions, list) or not source_regions:
+        raise ValueError("Map data response contains no regions")
+
+    source_styles = api_payload.get("styles", {}).get("regionStyles", {})
+    if not isinstance(source_styles, dict):
+        source_styles = {}
+
+    regions = []
+    for source in source_regions:
+        region_id = source.get("id")
+        title = source.get("title")
+        if region_id is None or not isinstance(title, str) or not title.strip():
+            raise ValueError("Map data response contains a region without an id or title")
+
+        features = []
+        for feature in source.get("features") or []:
+            geometry = feature.get("geometry") if isinstance(feature, dict) else None
+            if not isinstance(geometry, dict):
+                continue
+            geometry_type = geometry.get("type")
+            coordinates = geometry.get("coordinates")
+            if geometry_type not in {"Polygon", "MultiPolygon"} or not isinstance(coordinates, list):
+                continue
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": {"type": geometry_type, "coordinates": coordinates},
+                    "properties": {"id": region_id},
+                }
+            )
+        if not features:
+            raise ValueError(f"Region {region_id} ({title}) contains no polygon geometry")
+
+        center = None
+        if source.get("center_x") is not None and source.get("center_y") is not None:
+            center = {
+                "lat": float(source["center_y"]),
+                "lng": float(source["center_x"]),
+            }
+
+        style = source_styles.get(str(region_id), {})
+        if not isinstance(style, dict):
+            style = {}
+        regions.append(
+            {
+                "id": region_id,
+                "parentId": source.get("parent_region_id"),
+                "name": title.strip(),
+                "subtitle": source.get("subtitle"),
+                "order": source.get("order", 0),
+                "color": sanitize_color(style.get("fill-color"), "#fcee0a"),
+                "textColor": sanitize_color(style.get("text-color"), "#eeeddf"),
+                "haloColor": sanitize_color(style.get("text-halo-color"), "#111318"),
+                "center": center,
+                "features": features,
+            }
+        )
+
+    regions.sort(key=lambda region: (region["order"], region["name"], region["id"]))
+    return regions
+
+
 def build_output(
     api_payload: dict,
     page_html: str,
@@ -157,6 +226,7 @@ def build_output(
         raise ValueError(f"Map page contains map {map_data.get('map', {}).get('id')}, expected {MAP_ID}")
 
     locations = api_payload.get("locations")
+    regions = normalize_regions(api_payload)
     groups = map_data.get("groups")
     tile_sets = map_data.get("mapConfig", {}).get("tile_sets")
     if not isinstance(locations, list) or not locations:
@@ -260,6 +330,7 @@ def build_output(
             "minZoom": max(tile_set["min_zoom"] for tile_set in tile_sets),
             "maxZoom": max(tile_set["max_zoom"] for tile_set in tile_sets),
             "maxNativeZoom": min(tile_set["tiles_max_zoom"] for tile_set in tile_sets),
+            "regionDetailZoom": 13,
             "initialLat": map_config["start_lat"],
             "initialLng": map_config["start_lng"],
             "backgroundColor": current_map.get("backgroundColor", "#110b0b"),
@@ -269,10 +340,12 @@ def build_output(
             "markerSprite": current_map.get("markerSprite", "assets/images/markers@2x.webp"),
         },
         "types": types,
+        "regions": regions,
         "markers": markers,
     }
     summary = {
         "locations": len(markers),
+        "regions": len(regions),
         "details": len(details),
         "descriptions": sum(bool(detail["description"].strip()) for detail in details.values()),
         "linkedDescriptions": sum(bool(detail["linkedLocationIds"]) for detail in details.values()),

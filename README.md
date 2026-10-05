@@ -17,6 +17,7 @@ The application includes 2,577 locations across 52 marker types, rich location d
 ## Features
 
 - Interactive Night City map with standard and satellite layers
+- Zoom-aware region and district boundaries with map labels
 - 2,577 built-in locations organized into 52 marker types
 - Rich location descriptions and clickable links between related locations
 - Search and category filters
@@ -162,7 +163,7 @@ and location data from:
 https://mapgenie.io/api/v1/maps/115/data
 ```
 
-It deterministically regenerates `assets/data/map-data.json` and `assets/data/location-details.json`. This includes map settings, categories, sprite positions, markers, descriptions, related-location links, tags, and media metadata. Premium categories are excluded, invalid or inconsistent responses fail before replacing existing data, and unchanged output is not rewritten. The default source URLs are declared at the top of the script and can also be overridden with `--page-url` and `--data-url`.
+It deterministically regenerates `assets/data/map-data.json` and `assets/data/location-details.json`. This includes map settings, region geometry and styling, categories, sprite positions, markers, descriptions, related-location links, tags, and media metadata. Premium categories are excluded, invalid or inconsistent responses fail before replacing existing data, and unchanged output is not rewritten. The default source URLs are declared at the top of the script and can also be overridden with `--page-url` and `--data-url`.
 
 ## Architecture
 
