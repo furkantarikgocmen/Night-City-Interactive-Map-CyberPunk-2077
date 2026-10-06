@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#111318" />
   <title>Cyberpunk 2077 — Night City Map</title>
   <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css" />
-  <link rel="stylesheet" href="assets/css/styles.css?v=12" />
+  <link rel="stylesheet" href="assets/css/styles.css?v=16" />
 </head>
 <body>
   <div id="app">
@@ -34,7 +34,11 @@
       <section class="progress-panel">
         <div><strong id="foundCount">0</strong><span id="totalCount"> / 0 found</span></div>
         <div class="progress-track"><span id="progressBar"></span></div>
-        <button id="hideFoundButton" class="link-button">Hide found locations</button>
+        <div class="progress-filter" role="group" aria-label="Location completion filter">
+          <button type="button" class="active" data-progress-filter="all" aria-pressed="true">All</button>
+          <button type="button" data-progress-filter="found" aria-pressed="false">✓ Found</button>
+          <button type="button" data-progress-filter="missing" aria-pressed="false">○ Missing</button>
+        </div>
       </section>
 
       <div class="sidebar-tools">
@@ -108,6 +112,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="assets/vendor/leaflet/leaflet.js"></script>
-  <script src="assets/js/app.js?v=14"></script>
+  <script src="assets/js/app.js?v=16"></script>
 </body>
 </html>

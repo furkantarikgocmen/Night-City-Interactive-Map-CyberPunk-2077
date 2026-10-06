@@ -7,11 +7,15 @@
   const $ = selector => document.querySelector(selector);
   const legacyState = loadJson(LEGACY_STORAGE_KEY, {});
   const preferences = loadJson(PREFERENCES_KEY, { hiddenTypes: [], hideFound: false, layer: 0 });
-  const state = { custom: [], hiddenTypes: preferences.hiddenTypes || [], hideFound: !!preferences.hideFound, layer: Number(preferences.layer) || 0 };
+  const savedProgressFilter = ["all", "found", "missing"].includes(preferences.progressFilter)
+    ? preferences.progressFilter
+    : preferences.hideFound ? "missing" : "all";
+  const state = { custom: [], hiddenTypes: preferences.hiddenTypes || [], progressFilter: savedProgressFilter, layer: Number(preferences.layer) || 0 };
   const elements = {
     sidebar: $("#sidebar"), filters: $("#filters"), search: $("#searchInput"), details: $("#details"),
     foundCount: $("#foundCount"), totalCount: $("#totalCount"), progressBar: $("#progressBar"),
-    hideFound: $("#hideFoundButton"), visibleLabel: $("#visibleLabel"), addHint: $("#addHint"), toast: $("#toast")
+    progressFilters: [...document.querySelectorAll("[data-progress-filter]")],
+    visibleLabel: $("#visibleLabel"), addHint: $("#addHint"), toast: $("#toast")
   };
 
   let data;
@@ -43,7 +47,7 @@
   function savePreferences() {
     state.hiddenTypes = [...typeBySlug.keys()].filter(slug => !typeBySlug.get(slug).isParent && !activeTypes.has(slug));
     if (!activeTypes.has("custom")) state.hiddenTypes.push("custom");
-    localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ hiddenTypes: state.hiddenTypes, hideFound: state.hideFound, layer: state.layer }));
+    localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ hiddenTypes: state.hiddenTypes, progressFilter: state.progressFilter, layer: state.layer }));
   }
 
   async function apiFetch(path, options = {}) {
@@ -111,7 +115,9 @@
   function isVisible(item, query) {
     if (!item.custom && !activeTypes.has(item.type)) return false;
     if (item.custom && !activeTypes.has("custom")) return false;
-    if (state.hideFound && found.has(progressKey(item))) return false;
+    const isFound = found.has(progressKey(item));
+    if (state.progressFilter === "found" && !isFound) return false;
+    if (state.progressFilter === "missing" && isFound) return false;
     if (!query) return true;
     const typeName = typeBySlug.get(item.type)?.name || "Custom";
     return `${item.name} ${typeName} ${item.notes || ""}`.toLocaleLowerCase("en").includes(query);
@@ -192,7 +198,11 @@
     elements.foundCount.textContent = completed.toLocaleString("en-US");
     elements.totalCount.textContent = ` / ${total.toLocaleString("en-US")} found`;
     elements.progressBar.style.width = `${total ? completed / total * 100 : 0}%`;
-    elements.hideFound.textContent = state.hideFound ? "Show found locations" : "Hide found locations";
+    elements.progressFilters.forEach(button => {
+      const isActive = button.dataset.progressFilter === state.progressFilter;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-pressed", String(isActive));
+    });
   }
 
   function renderFilters() {
@@ -231,7 +241,7 @@
     return escapeHtml(value).replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
 
-  function renderInlineMarkdown(value) {
+  function renderInlineMarkdown(value, { locationControls = false } = {}) {
     const pattern = /\[([^\]]+)]\(([^)\s]+)\)|\*\*([^*]+)\*\*|_([^_\n]+)_|\*([^*\n]+)\*/g;
     let html = "";
     let cursor = 0;
@@ -241,7 +251,20 @@
         const label = escapeHtml(match[1]);
         const localMatch = match[2].match(/[?&]locationIds?=(\d+)/);
         if (localMatch) {
-          html += `<button type="button" class="location-link" data-location-id="${localMatch[1]}">${label}</button>`;
+          const locationId = localMatch[1];
+          const relatedItem = entryBySlug.get(locationId)?.item;
+          if (locationControls && relatedItem) {
+            const isCollected = found.has(progressKey(relatedItem));
+            html += `<span class="location-reference">
+              <button type="button" class="location-link location-link-card" data-location-id="${locationId}">${label}</button>
+              <button type="button" class="location-found-toggle ${isCollected ? "is-found" : ""}" data-found-location-id="${locationId}" aria-pressed="${isCollected}" aria-label="${isCollected ? "Remove collected mark from" : "Mark as collected:"} ${label}">
+                <span class="location-found-icon" aria-hidden="true">${isCollected ? "✓" : "○"}</span>
+                <span>${isCollected ? "Collected" : "Missing"}</span>
+              </button>
+            </span>`;
+          } else {
+            html += `<button type="button" class="location-link" data-location-id="${locationId}">${label}</button>`;
+          }
         } else {
           try {
             const url = new URL(match[2], window.location.origin);
@@ -274,7 +297,7 @@
     };
     const flushList = () => {
       if (!list.length) return;
-      output.push(`<ul>${list.map(item => `<li>${renderInlineMarkdown(item)}</li>`).join("")}</ul>`);
+      output.push(`<ul>${list.map(item => `<li>${renderInlineMarkdown(item, { locationControls: true })}</li>`).join("")}</ul>`);
       list = [];
     };
     for (const rawLine of lines) {
@@ -311,8 +334,12 @@
       activeTypes.add(entry.item.type);
       filtersChanged = true;
     }
-    if (state.hideFound && found.has(progressKey(entry.item))) {
-      state.hideFound = false;
+    const entryIsFound = found.has(progressKey(entry.item));
+    const hiddenByProgress =
+      (state.progressFilter === "found" && !entryIsFound) ||
+      (state.progressFilter === "missing" && entryIsFound);
+    if (hiddenByProgress) {
+      state.progressFilter = "all";
       filtersChanged = true;
     }
     if (elements.search.value) {
@@ -401,6 +428,34 @@
       if (wasFound) found.delete(key); else found.add(key);
       renderMarkers(); openDetails(selectedId);
       showToast(wasFound ? "Found mark removed" : "Location marked as found");
+    } catch (error) {
+      showToast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function toggleRelatedFound(locationId, button) {
+    const item = entryBySlug.get(String(locationId))?.item;
+    if (!item) {
+      showToast(`Location ${locationId} is not available in this map`);
+      return;
+    }
+    const key = progressKey(item);
+    const wasFound = found.has(key);
+    button.disabled = true;
+    try {
+      await apiFetch(`/api/v1/user/locations/${encodeURIComponent(key)}`, {
+        method: wasFound ? "DELETE" : "PUT",
+        body: JSON.stringify({ mapId: MAP_ID })
+      });
+      if (wasFound) found.delete(key); else found.add(key);
+      button.classList.toggle("is-found", !wasFound);
+      button.setAttribute("aria-pressed", String(!wasFound));
+      button.setAttribute("aria-label", `${wasFound ? "Mark as collected:" : "Remove collected mark from"} ${item.name}`);
+      button.innerHTML = `<span class="location-found-icon" aria-hidden="true">${wasFound ? "○" : "✓"}</span><span>${wasFound ? "Missing" : "Collected"}</span>`;
+      renderMarkers();
+      showToast(wasFound ? `${item.name}: collected mark removed` : `${item.name}: marked as collected`);
     } catch (error) {
       showToast(error.message);
     } finally {
@@ -520,11 +575,22 @@
     });
     $("#showAllButton").addEventListener("click", () => { activeTypes = new Set([...typeBySlug.values()].filter(type => !type.isParent).map(type => type.slug)); savePreferences(); renderFilters(); renderMarkers(); });
     $("#hideAllButton").addEventListener("click", () => { activeTypes.clear(); savePreferences(); renderFilters(); renderMarkers(); });
-    elements.hideFound.addEventListener("click", () => { state.hideFound = !state.hideFound; savePreferences(); renderMarkers(); });
+    elements.progressFilters.forEach(button => button.addEventListener("click", () => {
+      state.progressFilter = button.dataset.progressFilter;
+      savePreferences();
+      renderMarkers();
+    }));
     $("#defaultLayerButton").addEventListener("click", () => setLayer(0));
     $("#satelliteLayerButton").addEventListener("click", () => setLayer(1));
     $("#closeDetails").addEventListener("click", () => { focusRequest += 1; closeDetails(); });
     $("#detailDescription").addEventListener("click", event => {
+      const foundToggle = event.target.closest("[data-found-location-id]");
+      if (foundToggle) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleRelatedFound(foundToggle.dataset.foundLocationId, foundToggle);
+        return;
+      }
       const link = event.target.closest("[data-location-id]");
       if (!link) return;
       event.preventDefault();

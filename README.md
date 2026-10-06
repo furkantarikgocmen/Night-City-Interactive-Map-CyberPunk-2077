@@ -20,7 +20,8 @@ The application includes 2,577 locations across 52 marker types, rich location d
 - Zoom-aware region and district boundaries with map labels
 - 2,577 built-in locations organized into 52 marker types
 - Rich location descriptions and clickable links between related locations
-- Search and category filters
+- Inline collected/missing status and one-click progress controls for related loot
+- Search, category, and progress filters with All, Found-only, and Missing-only views
 - Unlimited found-location tracking
 - Add, edit, and delete personal map markers
 - Import and export progress as JSON
