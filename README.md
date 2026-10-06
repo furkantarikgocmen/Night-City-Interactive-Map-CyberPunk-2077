@@ -12,13 +12,21 @@ The application includes 2,577 locations across 52 marker types, rich location d
 
 ## Screenshots
 
-### Standard map and category filters
+### District boundaries, labels, and category filters
 
-![Night City standard map with category filters](docs/screenshots/map-view.png)
+![Night City map with district boundaries, labels, and category filters](docs/screenshots/map-view.png)
 
-### Satellite layer and found-location tracking
+### Satellite layer with the missing-locations filter
 
-![Night City satellite map with a found iconic weapon](docs/screenshots/satellite-view.png)
+![Night City satellite map showing missing locations](docs/screenshots/satellite-view.png)
+
+### Cleanup view for missed related loot
+
+![Cleanup view highlighting found activities with missing related loot](docs/screenshots/cleanup-view.png)
+
+### Found-only view with related-loot progress
+
+![Found-only view with inline related-loot progress and collection controls](docs/screenshots/found-view.png)
 
 ## Features
 
