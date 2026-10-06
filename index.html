@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#111318" />
   <title>Cyberpunk 2077 — Night City Map</title>
   <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css" />
-  <link rel="stylesheet" href="assets/css/styles.css?v=16" />
+  <link rel="stylesheet" href="assets/css/styles.css?v=17" />
 </head>
 <body>
   <div id="app">
@@ -38,7 +38,9 @@
           <button type="button" class="active" data-progress-filter="all" aria-pressed="true">All</button>
           <button type="button" data-progress-filter="found" aria-pressed="false">✓ Found</button>
           <button type="button" data-progress-filter="missing" aria-pressed="false">○ Missing</button>
+          <button type="button" data-progress-filter="cleanup" aria-pressed="false">! Cleanup</button>
         </div>
+        <p id="cleanupHint" class="cleanup-hint" hidden></p>
       </section>
 
       <div class="sidebar-tools">
@@ -74,6 +76,7 @@
           <span id="detailCategory" class="detail-category"></span>
           <h2 id="detailName"></h2>
         </div>
+        <div id="detailRelatedSummary" class="detail-related-summary" hidden></div>
         <div id="detailDescription" class="detail-description" hidden></div>
         <dl class="detail-meta">
           <div><dt>Coordinates</dt><dd id="detailCoordinates"></dd></div>
@@ -112,6 +115,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="assets/vendor/leaflet/leaflet.js"></script>
-  <script src="assets/js/app.js?v=16"></script>
+  <script src="assets/js/app.js?v=17"></script>
 </body>
 </html>

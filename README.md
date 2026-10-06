@@ -4,6 +4,12 @@ A self-hosted interactive map for Cyberpunk 2077 collectors who want to track ev
 
 The application includes 2,577 locations across 52 marker types, rich location descriptions with cross-map navigation, category filters, text search, standard and satellite map layers, persistent found status, custom markers, and JSON backup/restore.
 
+> [!IMPORTANT]
+> ### A note to the developers at MapGenie and IGN
+> **It was never just about the money. It was about the feature.**
+>
+> Collectors want to own their progress, track every discovery without arbitrary limits, and keep the tools they rely on running on infrastructure they control. This project is a small proof that the feature matters enough to build, maintain, and self-host.
+
 ## Screenshots
 
 ### Standard map and category filters
@@ -21,7 +27,8 @@ The application includes 2,577 locations across 52 marker types, rich location d
 - 2,577 built-in locations organized into 52 marker types
 - Rich location descriptions and clickable links between related locations
 - Inline collected/missing status and one-click progress controls for related loot
-- Search, category, and progress filters with All, Found-only, and Missing-only views
+- Search, category, and progress filters with All, Found-only, Missing-only, and Cleanup views
+- Cleanup mode highlights found activities that still contain uncollected related loot
 - Unlimited found-location tracking
 - Add, edit, and delete personal map markers
 - Import and export progress as JSON

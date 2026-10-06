@@ -7,14 +7,14 @@
   const $ = selector => document.querySelector(selector);
   const legacyState = loadJson(LEGACY_STORAGE_KEY, {});
   const preferences = loadJson(PREFERENCES_KEY, { hiddenTypes: [], hideFound: false, layer: 0 });
-  const savedProgressFilter = ["all", "found", "missing"].includes(preferences.progressFilter)
+  const savedProgressFilter = ["all", "found", "missing", "cleanup"].includes(preferences.progressFilter)
     ? preferences.progressFilter
     : preferences.hideFound ? "missing" : "all";
   const state = { custom: [], hiddenTypes: preferences.hiddenTypes || [], progressFilter: savedProgressFilter, layer: Number(preferences.layer) || 0 };
   const elements = {
     sidebar: $("#sidebar"), filters: $("#filters"), search: $("#searchInput"), details: $("#details"),
     foundCount: $("#foundCount"), totalCount: $("#totalCount"), progressBar: $("#progressBar"),
-    progressFilters: [...document.querySelectorAll("[data-progress-filter]")],
+    progressFilters: [...document.querySelectorAll("[data-progress-filter]")], cleanupHint: $("#cleanupHint"),
     visibleLabel: $("#visibleLabel"), addHint: $("#addHint"), toast: $("#toast")
   };
 
@@ -32,6 +32,8 @@
   let entryBySlug = new Map();
   let activeTypes = new Set();
   let found = new Set();
+  let cleanupKeys = new Set();
+  let cleanupParentKeys = new Set();
   let selectedId = null;
   let addMode = false;
   let toastTimer;
@@ -71,19 +73,23 @@
     toastTimer = setTimeout(() => elements.toast.classList.remove("show"), 2200);
   }
 
-  function pinHtml(type, isFound = false) {
-    if (!type?.icon) return `<div class="custom-pin ${isFound ? "found" : ""}">+</div>`;
-    return `<div class="map-pin ${isFound ? "found" : ""}" style="background-position:-${type.icon.offsetX}px -${type.icon.offsetY}px"></div>`;
+  function pinHtml(type, isFound = false, isCleanupMissing = false) {
+    const classes = `${isFound ? "found" : ""} ${isCleanupMissing ? "cleanup-missing" : ""}`.trim();
+    if (!type?.icon) return `<div class="custom-pin ${classes}">+</div>`;
+    return `<div class="map-pin ${classes}" style="background-position:-${type.icon.offsetX}px -${type.icon.offsetY}px"></div>`;
   }
 
   function markerIcon(item) {
     const type = typeBySlug.get(item.type);
+    const key = progressKey(item);
+    const isFound = found.has(key);
+    const isCleanupMissing = state.progressFilter === "cleanup" && cleanupKeys.has(key) && !isFound;
     if (item.custom || !type?.icon) {
-      return L.divIcon({ className: "", html: pinHtml(null, found.has(progressKey(item))), iconSize: [30, 39], iconAnchor: [15, 39] });
+      return L.divIcon({ className: "", html: pinHtml(null, isFound, isCleanupMissing), iconSize: [30, 39], iconAnchor: [15, 39] });
     }
     return L.divIcon({
       className: "",
-      html: pinHtml(type, found.has(progressKey(item))),
+      html: pinHtml(type, isFound, isCleanupMissing),
       iconSize: [type.icon.width, type.icon.height],
       iconAnchor: [type.icon.anchorX ?? type.icon.width / 2, type.icon.anchorY ?? type.icon.height]
     });
@@ -112,12 +118,43 @@
     entryBySlug = new Map(entries.filter(entry => !entry.item.custom).map(entry => [String(entry.item.slug), entry]));
   }
 
+  function relatedLocationIds(markdown = "") {
+    const ids = new Set();
+    for (const rawLine of String(markdown).replaceAll("\r", "").split("\n")) {
+      const bullet = rawLine.match(/^\s*[-*]\s+(.+)$/);
+      if (!bullet) continue;
+      for (const link of bullet[1].matchAll(/\[[^\]]+]\(([^)\s]+)\)/g)) {
+        const localMatch = link[1].match(/[?&]locationIds?=(\d+)/);
+        if (localMatch) ids.add(localMatch[1]);
+      }
+    }
+    return [...ids];
+  }
+
+  function refreshCleanupState() {
+    cleanupKeys = new Set();
+    cleanupParentKeys = new Set();
+    for (const parentKey of found) {
+      const parent = entryBySlug.get(String(parentKey))?.item;
+      if (!parent) continue;
+      const relatedItems = relatedLocationIds(locationDetails[String(parent.slug)]?.description)
+        .map(slug => entryBySlug.get(slug)?.item)
+        .filter(Boolean);
+      const missingItems = relatedItems.filter(item => !found.has(progressKey(item)));
+      if (!missingItems.length) continue;
+      cleanupParentKeys.add(progressKey(parent));
+      cleanupKeys.add(progressKey(parent));
+      missingItems.forEach(item => cleanupKeys.add(progressKey(item)));
+    }
+  }
+
   function isVisible(item, query) {
     if (!item.custom && !activeTypes.has(item.type)) return false;
     if (item.custom && !activeTypes.has("custom")) return false;
     const isFound = found.has(progressKey(item));
     if (state.progressFilter === "found" && !isFound) return false;
     if (state.progressFilter === "missing" && isFound) return false;
+    if (state.progressFilter === "cleanup" && !cleanupKeys.has(progressKey(item))) return false;
     if (!query) return true;
     const typeName = typeBySlug.get(item.type)?.name || "Custom";
     return `${item.name} ${typeName} ${item.notes || ""}`.toLocaleLowerCase("en").includes(query);
@@ -125,6 +162,7 @@
 
   function renderMarkers() {
     const query = elements.search.value.trim().toLocaleLowerCase("en");
+    refreshCleanupState();
     displayLayer.clearLayers();
     let visible = 0;
     for (const entry of entries) {
@@ -203,6 +241,11 @@
       button.classList.toggle("active", isActive);
       button.setAttribute("aria-pressed", String(isActive));
     });
+    const missingRelatedCount = cleanupKeys.size - cleanupParentKeys.size;
+    elements.cleanupHint.hidden = state.progressFilter !== "cleanup";
+    elements.cleanupHint.textContent = cleanupParentKeys.size
+      ? `${cleanupParentKeys.size.toLocaleString("en-US")} found location${cleanupParentKeys.size === 1 ? "" : "s"} · ${missingRelatedCount.toLocaleString("en-US")} missing related item${missingRelatedCount === 1 ? "" : "s"}`
+      : "No missing related items under found locations.";
   }
 
   function renderFilters() {
@@ -318,6 +361,23 @@
     return output.join("");
   }
 
+  function renderRelatedSummary(description = "") {
+    const summary = elements.details.querySelector("#detailRelatedSummary");
+    const relatedItems = relatedLocationIds(description)
+      .map(slug => entryBySlug.get(slug)?.item)
+      .filter(Boolean);
+    if (!relatedItems.length) {
+      summary.hidden = true;
+      summary.innerHTML = "";
+      return;
+    }
+    const collected = relatedItems.filter(item => found.has(progressKey(item))).length;
+    const percent = collected / relatedItems.length * 100;
+    summary.hidden = false;
+    summary.innerHTML = `<div class="detail-related-heading"><span>Related progress</span><strong>${collected} / ${relatedItems.length} collected</strong></div>
+      <div class="detail-related-track" role="progressbar" aria-label="Related item progress" aria-valuemin="0" aria-valuemax="${relatedItems.length}" aria-valuenow="${collected}"><span style="width:${percent}%"></span></div>`;
+  }
+
   function getItem(id) {
     return entryById.get(String(id))?.item;
   }
@@ -337,7 +397,8 @@
     const entryIsFound = found.has(progressKey(entry.item));
     const hiddenByProgress =
       (state.progressFilter === "found" && !entryIsFound) ||
-      (state.progressFilter === "missing" && entryIsFound);
+      (state.progressFilter === "missing" && entryIsFound) ||
+      (state.progressFilter === "cleanup" && !cleanupKeys.has(progressKey(entry.item)));
     if (hiddenByProgress) {
       state.progressFilter = "all";
       filtersChanged = true;
@@ -391,6 +452,7 @@
     const descriptionElement = detailElement("#detailDescription");
     descriptionElement.innerHTML = renderMarkdown(description || "");
     descriptionElement.hidden = !description?.trim();
+    renderRelatedSummary(description || "");
     const isFound = found.has(progressKey(item));
     detailElement("#foundButton").textContent = isFound ? "Found ✓" : "Mark as found";
     detailElement("#foundButton").classList.toggle("is-found", isFound);
@@ -455,6 +517,11 @@
       button.setAttribute("aria-label", `${wasFound ? "Mark as collected:" : "Remove collected mark from"} ${item.name}`);
       button.innerHTML = `<span class="location-found-icon" aria-hidden="true">${wasFound ? "○" : "✓"}</span><span>${wasFound ? "Missing" : "Collected"}</span>`;
       renderMarkers();
+      const selectedItem = getItem(selectedId);
+      if (selectedItem) {
+        const selectedDescription = selectedItem.custom ? selectedItem.notes : locationDetails[String(selectedItem.slug)]?.description;
+        renderRelatedSummary(selectedDescription || "");
+      }
       showToast(wasFound ? `${item.name}: collected mark removed` : `${item.name}: marked as collected`);
     } catch (error) {
       showToast(error.message);
