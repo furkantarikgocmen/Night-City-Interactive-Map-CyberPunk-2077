@@ -118,13 +118,61 @@
     entryBySlug = new Map(entries.filter(entry => !entry.item.custom).map(entry => [String(entry.item.slug), entry]));
   }
 
+  function markdownLinks(value = "") {
+    const source = String(value);
+    const links = [];
+    for (let start = 0; start < source.length; start += 1) {
+      if (source[start] !== "[" || source[start - 1] === "\\") continue;
+
+      let bracketDepth = 1;
+      let labelEnd = -1;
+      for (let cursor = start + 1; cursor < source.length; cursor += 1) {
+        if (source[cursor] === "\\") {
+          cursor += 1;
+        } else if (source[cursor] === "[") {
+          bracketDepth += 1;
+        } else if (source[cursor] === "]") {
+          bracketDepth -= 1;
+          if (bracketDepth === 0) {
+            labelEnd = cursor;
+            break;
+          }
+        }
+      }
+      if (labelEnd < 0 || source[labelEnd + 1] !== "(") continue;
+
+      let parenthesisDepth = 1;
+      let urlEnd = -1;
+      for (let cursor = labelEnd + 2; cursor < source.length; cursor += 1) {
+        if (source[cursor] === "\\") {
+          cursor += 1;
+        } else if (source[cursor] === "(") {
+          parenthesisDepth += 1;
+        } else if (source[cursor] === ")") {
+          parenthesisDepth -= 1;
+          if (parenthesisDepth === 0) {
+            urlEnd = cursor;
+            break;
+          }
+        }
+      }
+      if (urlEnd < 0) continue;
+
+      const url = source.slice(labelEnd + 2, urlEnd).trim();
+      if (!url || /\s/.test(url)) continue;
+      links.push({ start, end: urlEnd + 1, label: source.slice(start + 1, labelEnd), url });
+      start = urlEnd;
+    }
+    return links;
+  }
+
   function relatedLocationIds(markdown = "") {
     const ids = new Set();
     for (const rawLine of String(markdown).replaceAll("\r", "").split("\n")) {
       const bullet = rawLine.match(/^\s*[-*]\s+(.+)$/);
       if (!bullet) continue;
-      for (const link of bullet[1].matchAll(/\[[^\]]+]\(([^)\s]+)\)/g)) {
-        const localMatch = link[1].match(/[?&]locationIds?=(\d+)/);
+      for (const link of markdownLinks(bullet[1])) {
+        const localMatch = link.url.match(/[?&]locationIds?=(\d+)/);
         if (localMatch) ids.add(localMatch[1]);
       }
     }
@@ -284,48 +332,58 @@
     return escapeHtml(value).replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
 
-  function renderInlineMarkdown(value, { locationControls = false } = {}) {
-    const pattern = /\[([^\]]+)]\(([^)\s]+)\)|\*\*([^*]+)\*\*|_([^_\n]+)_|\*([^*\n]+)\*/g;
+  function renderTextMarkdown(value = "") {
+    const pattern = /\*\*([^*]+)\*\*|_([^_\n]+)_|\*([^*\n]+)\*/g;
     let html = "";
     let cursor = 0;
     for (const match of value.matchAll(pattern)) {
       html += escapeHtml(value.slice(cursor, match.index));
       if (match[1] !== undefined) {
-        const label = escapeHtml(match[1]);
-        const localMatch = match[2].match(/[?&]locationIds?=(\d+)/);
-        if (localMatch) {
-          const locationId = localMatch[1];
-          const relatedItem = entryBySlug.get(locationId)?.item;
-          if (locationControls && relatedItem) {
-            const isCollected = found.has(progressKey(relatedItem));
-            html += `<span class="location-reference">
-              <button type="button" class="location-link location-link-card" data-location-id="${locationId}">${label}</button>
-              <button type="button" class="location-found-toggle ${isCollected ? "is-found" : ""}" data-found-location-id="${locationId}" aria-pressed="${isCollected}" aria-label="${isCollected ? "Remove collected mark from" : "Mark as collected:"} ${label}">
-                <span class="location-found-icon" aria-hidden="true">${isCollected ? "✓" : "○"}</span>
-                <span>${isCollected ? "Collected" : "Missing"}</span>
-              </button>
-            </span>`;
-          } else {
-            html += `<button type="button" class="location-link" data-location-id="${locationId}">${label}</button>`;
-          }
-        } else {
-          try {
-            const url = new URL(match[2], window.location.origin);
-            html += ["http:", "https:"].includes(url.protocol)
-              ? `<a href="${escapeAttribute(url.href)}" target="_blank" rel="noopener noreferrer">${label}</a>`
-              : label;
-          } catch {
-            html += label;
-          }
-        }
-      } else if (match[3] !== undefined) {
-        html += `<strong>${escapeHtml(match[3])}</strong>`;
+        html += `<strong>${escapeHtml(match[1])}</strong>`;
       } else {
-        html += `<em>${escapeHtml(match[4] ?? match[5])}</em>`;
+        html += `<em>${escapeHtml(match[2] ?? match[3])}</em>`;
       }
       cursor = match.index + match[0].length;
     }
     return html + escapeHtml(value.slice(cursor));
+  }
+
+  function renderInlineMarkdown(value, { locationControls = false } = {}) {
+    let html = "";
+    let cursor = 0;
+    for (const link of markdownLinks(value)) {
+      html += renderTextMarkdown(value.slice(cursor, link.start));
+      const label = escapeHtml(link.label);
+      const labelAttribute = escapeAttribute(link.label);
+      const localMatch = link.url.match(/[?&]locationIds?=(\d+)/);
+      if (localMatch) {
+        const locationId = localMatch[1];
+        const relatedItem = entryBySlug.get(locationId)?.item;
+        if (locationControls && relatedItem) {
+          const isCollected = found.has(progressKey(relatedItem));
+          html += `<span class="location-reference">
+            <button type="button" class="location-link location-link-card" data-location-id="${locationId}">${label}</button>
+            <button type="button" class="location-found-toggle ${isCollected ? "is-found" : ""}" data-found-location-id="${locationId}" aria-pressed="${isCollected}" aria-label="${isCollected ? "Remove collected mark from" : "Mark as collected:"} ${labelAttribute}">
+              <span class="location-found-icon" aria-hidden="true">${isCollected ? "✓" : "○"}</span>
+              <span>${isCollected ? "Collected" : "Missing"}</span>
+            </button>
+          </span>`;
+        } else {
+          html += `<button type="button" class="location-link" data-location-id="${locationId}">${label}</button>`;
+        }
+      } else {
+        try {
+          const url = new URL(link.url, window.location.origin);
+          html += ["http:", "https:"].includes(url.protocol)
+            ? `<a href="${escapeAttribute(url.href)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+            : label;
+        } catch {
+          html += label;
+        }
+      }
+      cursor = link.end;
+    }
+    return html + renderTextMarkdown(value.slice(cursor));
   }
 
   function renderMarkdown(markdown = "") {
