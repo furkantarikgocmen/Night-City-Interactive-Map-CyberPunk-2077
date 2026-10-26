@@ -90,6 +90,23 @@ def fetch_text(url: str, *, accept: str, timeout: float) -> str:
         raise ValueError(f"GET {url} failed: {error.reason}") from error
 
 
+def fetch_binary(url: str, *, accept: str, timeout: float) -> bytes:
+    request = Request(url, headers={**REQUEST_HEADERS, "Accept": accept})
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            payload = response.read()
+            content_encoding = (response.headers.get("Content-Encoding") or "identity").lower()
+            if content_encoding == "gzip":
+                payload = gzip.decompress(payload)
+            elif content_encoding not in {"identity", ""}:
+                raise ValueError(f"GET {url} returned unsupported encoding: {content_encoding}")
+            return payload
+    except HTTPError as error:
+        raise ValueError(f"GET {url} failed with HTTP {error.code}") from error
+    except URLError as error:
+        raise ValueError(f"GET {url} failed: {error.reason}") from error
+
+
 def extract_js_json(source: str, prefix: str) -> object:
     start = source.find(prefix)
     if start < 0:
@@ -99,6 +116,29 @@ def extract_js_json(source: str, prefix: str) -> object:
         start += 1
     value, _end = json.JSONDecoder().raw_decode(source[start:])
     return value
+
+
+def extract_js_string(source: str, variable: str) -> str:
+    match = re.search(
+        rf"const\s+{re.escape(variable)}\s*=\s*(['\"])(.*?)\1",
+        source,
+    )
+    if not match:
+        raise ValueError(f"Embedded string not found in map page: {variable}")
+    return match.group(2)
+
+
+def extract_js_integer(source: str, variable: str) -> int:
+    match = re.search(rf"const\s+{re.escape(variable)}\s*=\s*(\d+)", source)
+    if not match:
+        raise ValueError(f"Embedded integer not found in map page: {variable}")
+    return int(match.group(1))
+
+
+def png_dimensions(payload: bytes) -> tuple[int, int]:
+    if len(payload) < 24 or payload[:8] != b"\x89PNG\r\n\x1a\n" or payload[12:16] != b"IHDR":
+        raise ValueError("Marker sprite response is not a valid PNG image")
+    return int.from_bytes(payload[16:20], "big"), int.from_bytes(payload[20:24], "big")
 
 
 def scaled_icon(sprite: dict | None) -> dict | None:
@@ -218,9 +258,27 @@ def build_output(
     *,
     page_url: str,
     data_url: str,
-) -> tuple[dict, dict, dict]:
+) -> tuple[dict, dict, dict, dict]:
     map_data = extract_js_json(page_html, "window.mapData = ")
     sprite_positions = extract_js_json(page_html, "const MARKER_SPRITE_POSITIONS_V3 = ")
+    sprite_url = extract_js_string(page_html, "MARKER_IMAGES_URL")
+    sprite_width = extract_js_integer(page_html, "MARKER_IMAGES_WIDTH")
+    sprite_height = extract_js_integer(page_html, "MARKER_IMAGES_HEIGHT")
+
+    sprite_ratios = {
+        int(sprite.get("pixelRatio") or 1)
+        for sprite in sprite_positions.values()
+        if sprite
+    }
+    if len(sprite_ratios) != 1:
+        raise ValueError(f"Marker sprite has inconsistent pixel ratios: {sorted(sprite_ratios)}")
+    sprite_ratio = sprite_ratios.pop()
+    sprite_css_width = sprite_width / sprite_ratio
+    sprite_css_height = sprite_height / sprite_ratio
+    if not sprite_css_width.is_integer() or not sprite_css_height.is_integer():
+        raise ValueError("Marker sprite dimensions are not divisible by its pixel ratio")
+    sprite_css_width = int(sprite_css_width)
+    sprite_css_height = int(sprite_css_height)
 
     if str(map_data.get("map", {}).get("id")) != str(MAP_ID):
         raise ValueError(f"Map page contains map {map_data.get('map', {}).get('id')}, expected {MAP_ID}")
@@ -337,7 +395,9 @@ def build_output(
             "tilesets": [
                 f"https://tiles.mapgenie.io/games/{tile_set['pattern']}" for tile_set in tile_sets
             ],
-            "markerSprite": current_map.get("markerSprite", "assets/images/markers@2x.webp"),
+            "markerSprite": "assets/images/markers@2x.png",
+            "markerSpriteWidth": sprite_css_width,
+            "markerSpriteHeight": sprite_css_height,
         },
         "types": types,
         "regions": regions,
@@ -353,7 +413,14 @@ def build_output(
         "newLocations": len(set(marker["slug"] for marker in markers) - set(existing_by_slug)),
         "removedLocations": len(set(existing_by_slug) - set(marker["slug"] for marker in markers)),
     }
-    return output, details, summary
+    sprite = {
+        "url": sprite_url,
+        "width": sprite_width,
+        "height": sprite_height,
+        "cssWidth": sprite_css_width,
+        "cssHeight": sprite_css_height,
+    }
+    return output, details, summary, sprite
 
 
 def write_json(path: Path, value: object) -> None:
@@ -365,11 +432,19 @@ def write_json(path: Path, value: object) -> None:
     temporary.replace(path)
 
 
+def write_binary(path: Path, value: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_bytes(value)
+    temporary.replace(path)
+
+
 def main() -> int:
     args = parse_args()
     project_root = args.project_root.resolve()
     map_path = project_root / "assets" / "data" / "map-data.json"
     details_path = project_root / "assets" / "data" / "location-details.json"
+    sprite_path = project_root / "assets" / "images" / "markers@2x.png"
     try:
         with map_path.open("r", encoding="utf-8") as handle:
             current = json.load(handle)
@@ -382,20 +457,31 @@ def main() -> int:
         page_html = fetch_text(args.page_url, accept="text/html,application/xhtml+xml", timeout=args.timeout)
         api_text = fetch_text(args.data_url, accept="application/json", timeout=args.timeout)
         api_payload = json.loads(api_text)
-        output, details, summary = build_output(
+        output, details, summary, sprite = build_output(
             api_payload,
             page_html,
             current,
             page_url=args.page_url,
             data_url=args.data_url,
         )
+        sprite_payload = fetch_binary(sprite["url"], accept="image/png", timeout=args.timeout)
+        actual_sprite_size = png_dimensions(sprite_payload)
+        expected_sprite_size = (sprite["width"], sprite["height"])
+        if actual_sprite_size != expected_sprite_size:
+            raise ValueError(
+                f"Marker sprite is {actual_sprite_size[0]}x{actual_sprite_size[1]}, "
+                f"expected {expected_sprite_size[0]}x{expected_sprite_size[1]}"
+            )
         map_changed = output != current
         details_changed = details != current_details
+        sprite_changed = not sprite_path.exists() or sprite_path.read_bytes() != sprite_payload
         if not args.check:
             if map_changed:
                 write_json(map_path, output)
             if details_changed:
                 write_json(details_path, details)
+            if sprite_changed:
+                write_binary(sprite_path, sprite_payload)
         mode = "Checked" if args.check else "Updated"
         print(f"{mode} Night City data")
         print(f"  page: {args.page_url}")
@@ -404,9 +490,12 @@ def main() -> int:
             print(f"  {key}: {value}")
         print(f"  mapDataChanged: {str(map_changed).lower()}")
         print(f"  locationDetailsChanged: {str(details_changed).lower()}")
+        print(f"  markerSprite: {sprite['url']}")
+        print(f"  markerSpriteSize: {sprite['width']}x{sprite['height']}")
+        print(f"  markerSpriteChanged: {str(sprite_changed).lower()}")
         if args.check:
             print("  no files written (--check)")
-        elif not map_changed and not details_changed:
+        elif not map_changed and not details_changed and not sprite_changed:
             print("  no files written (already up to date)")
         return 0
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:

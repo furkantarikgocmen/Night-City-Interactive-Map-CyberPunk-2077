@@ -73,6 +73,17 @@
     toastTimer = setTimeout(() => elements.toast.classList.remove("show"), 2200);
   }
 
+  function applyMarkerSpriteMetadata() {
+    const width = Number(data.map.markerSpriteWidth) || 231;
+    const height = Number(data.map.markerSpriteHeight) || 289;
+    const sidebarScale = 25 / 33;
+    const rootStyle = document.documentElement.style;
+    rootStyle.setProperty("--marker-sprite-width", `${width}px`);
+    rootStyle.setProperty("--marker-sprite-height", `${height}px`);
+    rootStyle.setProperty("--sidebar-marker-sprite-width", `${width * sidebarScale}px`);
+    rootStyle.setProperty("--sidebar-marker-sprite-height", `${height * sidebarScale}px`);
+  }
+
   function pinHtml(type, isFound = false, isCleanupMissing = false) {
     const classes = `${isFound ? "found" : ""} ${isCleanupMissing ? "cleanup-missing" : ""}`.trim();
     if (!type?.icon) return `<div class="custom-pin ${classes}">+</div>`;
@@ -746,12 +757,13 @@
   async function initialize() {
     try {
       const [mapFile, detailsFile, mapState, customState] = await Promise.all([
-        fetch("assets/data/map-data.json?v=8").then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); }),
-        fetch("assets/data/location-details.json?v=1").then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); }),
+        fetch("assets/data/map-data.json?v=9").then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); }),
+        fetch("assets/data/location-details.json?v=2").then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); }),
         apiFetch(`/api/v1/user/map-data/${MAP_ID}`),
         apiFetch(`/api/v1/user/custom-markers?mapId=${MAP_ID}`)
       ]);
       data = mapFile;
+      applyMarkerSpriteMetadata();
       locationDetails = detailsFile;
       found = new Set(Object.keys(mapState.locations || {}));
       state.custom = customState.markers || [];

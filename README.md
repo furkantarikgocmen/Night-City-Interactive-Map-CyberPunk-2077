@@ -2,13 +2,20 @@
 
 A self-hosted interactive map for Cyberpunk 2077 collectors who want to track everything they discover across Night City without a subscription or an arbitrary found-item limit.
 
-The application includes 2,577 locations across 52 marker types, rich location descriptions with cross-map navigation, category filters, text search, standard and satellite map layers, persistent found status, custom markers, and JSON backup/restore.
+The application includes 2,622 locations across 52 marker types, rich location descriptions with cross-map navigation, category filters, text search, standard and satellite map layers, persistent found status, custom markers, and JSON backup/restore.
 
 > [!IMPORTANT]
 > ### A note to the developers at MapGenie and IGN
 > **It was never just about the money. It was about the feature.**
 >
 > Collectors want to own their progress, track every discovery without arbitrary limits, and keep the tools they rely on running on infrastructure they control. This project is a small proof that the feature matters enough to build, maintain, and self-host.
+
+## Data updates
+
+Upstream map-data refreshes are reviewed and documented before they are merged. Each dated report lists every added and removed location, changed descriptions and categories, sprite changes, validation results, and any known compatibility issues.
+
+- [Latest update: October 26, 2026](docs/data-updates/2026-10-26.md) — 46 locations added, one obsolete placeholder removed, new Glamdoc data, and the v11 marker sprite
+- [Update history and documentation format](docs/data-updates/README.md)
 
 ## Screenshots
 
@@ -32,7 +39,7 @@ The application includes 2,577 locations across 52 marker types, rich location d
 
 - Interactive Night City map with standard and satellite layers
 - Zoom-aware region and district boundaries with map labels
-- 2,577 built-in locations organized into 52 marker types
+- 2,622 built-in locations organized into 52 marker types
 - Rich location descriptions and clickable links between related locations
 - Inline collected/missing status and one-click progress controls for related loot
 - Search, category, and progress filters with All, Found-only, Missing-only, and Cleanup views
@@ -179,7 +186,7 @@ and location data from:
 https://mapgenie.io/api/v1/maps/115/data
 ```
 
-It deterministically regenerates `assets/data/map-data.json` and `assets/data/location-details.json`. This includes map settings, region geometry and styling, categories, sprite positions, markers, descriptions, related-location links, tags, and media metadata. Premium categories are excluded, invalid or inconsistent responses fail before replacing existing data, and unchanged output is not rewritten. The default source URLs are declared at the top of the script and can also be overridden with `--page-url` and `--data-url`.
+It deterministically regenerates `assets/data/map-data.json`, `assets/data/location-details.json`, and the local marker sprite in `assets/images/markers@2x.png`. This includes map settings, region geometry and styling, categories, sprite positions and dimensions, markers, descriptions, related-location links, tags, and media metadata. Premium categories are excluded, invalid or inconsistent responses fail before replacing existing data, and unchanged output is not rewritten. The default source URLs are declared at the top of the script and can also be overridden with `--page-url` and `--data-url`.
 
 ## Architecture
 
