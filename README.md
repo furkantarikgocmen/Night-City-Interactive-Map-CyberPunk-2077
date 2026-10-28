@@ -2,7 +2,7 @@
 
 A self-hosted interactive map for Cyberpunk 2077 collectors who want to track everything they discover across Night City without a subscription or an arbitrary found-item limit.
 
-The application includes 2,622 locations across 52 marker types, rich location descriptions with cross-map navigation, category filters, text search, standard and satellite map layers, persistent found status, custom markers, and JSON backup/restore.
+The application includes 2,637 locations across 52 marker types, rich location descriptions with cross-map navigation, category filters, text search, standard and satellite map layers, persistent found status, custom markers, and JSON backup/restore.
 
 > [!IMPORTANT]
 > ### A note to the developers at MapGenie and IGN
@@ -14,7 +14,7 @@ The application includes 2,622 locations across 52 marker types, rich location d
 
 Upstream map-data refreshes are reviewed and documented before they are merged. Each dated report lists every added and removed location, changed descriptions and categories, sprite changes, validation results, and any known compatibility issues.
 
-- [Latest update: October 26, 2026](docs/data-updates/2026-10-26.md) — 46 locations added, one obsolete placeholder removed, new Glamdoc data, and the v11 marker sprite
+- [Latest update: October 28, 2026](docs/data-updates/2026-10-28.md) — 15 locations added, including the Clampdown side job, a Night City Prison/BD Therapy cluster, and a Tomb Raider easter egg
 - [Update history and documentation format](docs/data-updates/README.md)
 
 ## Screenshots
@@ -39,7 +39,7 @@ Upstream map-data refreshes are reviewed and documented before they are merged. 
 
 - Interactive Night City map with standard and satellite layers
 - Zoom-aware region and district boundaries with map labels
-- 2,622 built-in locations organized into 52 marker types
+- 2,637 built-in locations organized into 52 marker types
 - Rich location descriptions and clickable links between related locations
 - Inline collected/missing status and one-click progress controls for related loot
 - Search, category, and progress filters with All, Found-only, Missing-only, and Cleanup views

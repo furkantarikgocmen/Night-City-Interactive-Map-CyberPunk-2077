@@ -2,6 +2,11 @@
 
 Each upstream map-data refresh is documented in this directory before it is committed.
 
+## Updates
+
+- [2026-10-28](2026-10-28.md) — 15 new locations, including Clampdown and the Night City Prison/BD Therapy cluster
+- [2026-10-26](2026-10-26.md) — 46 additions, one removal, Glamdoc, and the v11 marker sprite
+
 ## File naming
 
 Use the refresh date in ISO 8601 format:
