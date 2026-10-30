@@ -28,6 +28,8 @@
   let focusRequest = 0;
   let typeBySlug = new Map();
   let entries = [];
+  let filteredEntries = [];
+  let displayedEntries = new Map();
   let entryById = new Map();
   let entryBySlug = new Map();
   let activeTypes = new Set();
@@ -123,6 +125,8 @@
   }
 
   function refreshEntries() {
+    if (displayLayer) displayLayer.clearLayers();
+    displayedEntries = new Map();
     const customItems = state.custom.map(item => ({ ...item, custom: true, type: item.type || "custom" }));
     entries = [...data.markers, ...customItems].map(createEntry);
     entryById = new Map(entries.map(entry => [String(entry.item.id), entry]));
@@ -222,16 +226,33 @@
   function renderMarkers() {
     const query = elements.search.value.trim().toLocaleLowerCase("en");
     refreshCleanupState();
-    displayLayer.clearLayers();
-    let visible = 0;
-    for (const entry of entries) {
-      if (!isVisible(entry.item, query)) continue;
+    filteredEntries = entries.filter(entry => isVisible(entry.item, query));
+    for (const entry of filteredEntries) {
       entry.marker.setIcon(markerIcon(entry.item));
-      displayLayer.addLayer(entry.marker);
-      visible += 1;
     }
-    elements.visibleLabel.textContent = `${visible.toLocaleString("en-US")} locations`;
+    renderViewportMarkers();
+    elements.visibleLabel.textContent = `${filteredEntries.length.toLocaleString("en-US")} locations`;
     renderProgress();
+  }
+
+  function renderViewportMarkers() {
+    if (!map || !displayLayer) return;
+    const bufferedBounds = map.getBounds().pad(0.1);
+    const desiredEntries = new Map();
+    for (const entry of filteredEntries) {
+      if (bufferedBounds.contains(entry.marker.getLatLng()) || String(entry.item.id) === String(selectedId)) {
+        desiredEntries.set(String(entry.item.id), entry);
+      }
+    }
+    for (const [id, entry] of displayedEntries) {
+      const desired = desiredEntries.get(id);
+      if (!desired || desired.marker !== entry.marker) displayLayer.removeLayer(entry.marker);
+    }
+    for (const [id, entry] of desiredEntries) {
+      const current = displayedEntries.get(id);
+      if (!current || current.marker !== entry.marker) displayLayer.addLayer(entry.marker);
+    }
+    displayedEntries = desiredEntries;
   }
 
   function safeCssColor(value, fallback) {
@@ -704,6 +725,7 @@
 
   function bindEvents() {
     map.on("zoomend", renderRegions);
+    map.on("moveend", renderViewportMarkers);
     elements.search.addEventListener("input", renderMarkers);
     document.addEventListener("keydown", event => {
       if (event.key === "/" && !["INPUT","TEXTAREA","SELECT"].includes(document.activeElement.tagName)) { event.preventDefault(); elements.search.focus(); }
@@ -786,7 +808,16 @@
       activeTypes = new Set(leafTypes.filter(type => !state.hiddenTypes.includes(type.slug)).map(type => type.slug));
       if (!state.hiddenTypes.includes("custom")) activeTypes.add("custom");
 
-      map = L.map("map", { minZoom: data.map.minZoom, maxZoom: data.map.maxZoom, zoomControl: true, preferCanvas: true })
+      map = L.map("map", {
+        minZoom: data.map.minZoom,
+        maxZoom: data.map.maxZoom,
+        zoomControl: true,
+        preferCanvas: true,
+        zoomSnap: 0.125,
+        zoomDelta: 0.25,
+        wheelPxPerZoomLevel: 160,
+        wheelDebounceTime: 16
+      })
         .setView([data.map.initialLat, data.map.initialLng], Math.min(data.map.maxZoom, data.map.initialZoom + 2));
       map.setMaxBounds([[0.25, -1.12], [1.08, -0.28]]);
       detailPopup = L.popup({
@@ -812,7 +843,11 @@
       map.getPane("regionLabels").style.pointerEvents = "none";
       tileLayers = data.map.tilesets.map((url, index) => L.tileLayer(url, {
         minZoom: data.map.minZoom, maxZoom: data.map.maxZoom, maxNativeZoom: data.map.maxNativeZoom,
-        noWrap: true, keepBuffer: 3, attribution: index === 0 ? "Map tiles © MapGenie" : "Satellite tiles © MapGenie"
+        noWrap: true,
+        keepBuffer: 4,
+        updateWhenZooming: false,
+        updateWhenIdle: true,
+        attribution: index === 0 ? "Map tiles © MapGenie" : "Satellite tiles © MapGenie"
       }));
       regionLayer = L.layerGroup().addTo(map);
       displayLayer = L.layerGroup().addTo(map);
