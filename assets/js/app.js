@@ -6,11 +6,13 @@
   const MAP_ID = 115;
   const $ = selector => document.querySelector(selector);
   const legacyState = loadJson(LEGACY_STORAGE_KEY, {});
-  const preferences = loadJson(PREFERENCES_KEY, { hiddenTypes: [], hideFound: false, layer: 0 });
+  const preferences = loadJson(PREFERENCES_KEY, { hiddenTypes: [], hideFound: false, layer: "map" });
   const savedProgressFilter = ["all", "found", "missing", "cleanup"].includes(preferences.progressFilter)
     ? preferences.progressFilter
     : preferences.hideFound ? "missing" : "all";
-  const state = { custom: [], hiddenTypes: preferences.hiddenTypes || [], progressFilter: savedProgressFilter, layer: Number(preferences.layer) || 0 };
+  const legacyLayer = Number(preferences.layer) === 1 ? "satellite" : "map";
+  const savedLayer = ["map", "satellite", "hdSatellite"].includes(preferences.layer) ? preferences.layer : legacyLayer;
+  const state = { custom: [], hiddenTypes: preferences.hiddenTypes || [], progressFilter: savedProgressFilter, layer: savedLayer };
   const elements = {
     sidebar: $("#sidebar"), filters: $("#filters"), search: $("#searchInput"), details: $("#details"),
     foundCount: $("#foundCount"), totalCount: $("#totalCount"), progressBar: $("#progressBar"),
@@ -21,7 +23,8 @@
   let data;
   let locationDetails = {};
   let map;
-  let tileLayers;
+  let basemapProviders;
+  let activeBasemap;
   let regionLayer;
   let displayLayer;
   let detailPopup;
@@ -620,13 +623,128 @@
     }
   }
 
-  function setLayer(index) {
-    tileLayers.forEach(layer => map.removeLayer(layer));
-    tileLayers[index].addTo(map);
-    state.layer = index;
-    $("#defaultLayerButton").classList.toggle("active", index === 0);
-    $("#satelliteLayerButton").classList.toggle("active", index === 1);
+  function setLayer(id) {
+    const provider = basemapProviders.get(id) || basemapProviders.get("map");
+    if (activeBasemap) map.removeLayer(activeBasemap.layer);
+    provider.layer.addTo(map);
+    activeBasemap = provider;
+    state.layer = provider.id;
+    document.querySelectorAll("[data-basemap]").forEach(button => {
+      const active = button.dataset.basemap === provider.id;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
     savePreferences();
+  }
+
+  function createHdSatelliteLayer() {
+    const GAME_X = { scale: 28154.59144083235, offset: 19486.5181386743 };
+    const GAME_Y = { scale: 28205.525387347716, offset: -18188.119006909335 };
+    const TILE_SIZE = 256;
+    const MAX_SOURCE_ZOOM = 7;
+    const ZOOM_OFFSET = 9.27;
+
+    function sourcePoint(latlng, zoom) {
+      const gameX = GAME_X.scale * latlng.lng + GAME_X.offset;
+      const gameY = GAME_Y.scale * latlng.lat + GAME_Y.offset;
+      const scale = 2 ** zoom;
+      return L.point((gameX / 64 + 128) * scale, (-gameY / 64 + 128) * scale);
+    }
+
+    const HdSatelliteGrid = L.GridLayer.extend({
+      createTile(coords, done) {
+        const canvas = L.DomUtil.create("canvas", "leaflet-tile");
+        const targetTopLeft = L.point(coords.x * TILE_SIZE, coords.y * TILE_SIZE);
+        const targetBottomRight = targetTopLeft.add([TILE_SIZE, TILE_SIZE]);
+        const sourceZoom = Math.max(0, Math.min(MAX_SOURCE_ZOOM, Math.round(coords.z - ZOOM_OFFSET)));
+        const sourceTopLeft = sourcePoint(map.unproject(targetTopLeft, coords.z), sourceZoom);
+        const sourceBottomRight = sourcePoint(map.unproject(targetBottomRight, coords.z), sourceZoom);
+        const sourceWidth = sourceBottomRight.x - sourceTopLeft.x;
+        const sourceHeight = sourceBottomRight.y - sourceTopLeft.y;
+        const renderWidth = Math.max(1, Math.ceil(sourceWidth));
+        const renderHeight = Math.max(1, Math.ceil(sourceHeight));
+        canvas.width = renderWidth;
+        canvas.height = renderHeight;
+        canvas.style.width = `${TILE_SIZE}px`;
+        canvas.style.height = `${TILE_SIZE}px`;
+        const context = canvas.getContext("2d");
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = "high";
+        const minTileX = Math.floor(sourceTopLeft.x / TILE_SIZE);
+        const maxTileX = Math.floor((sourceBottomRight.x - 0.001) / TILE_SIZE);
+        const minTileY = Math.floor(sourceTopLeft.y / TILE_SIZE);
+        const maxTileY = Math.floor((sourceBottomRight.y - 0.001) / TILE_SIZE);
+        const worldTiles = 2 ** sourceZoom;
+        const jobs = [];
+
+        for (let tileY = minTileY; tileY <= maxTileY; tileY += 1) {
+          for (let tileX = minTileX; tileX <= maxTileX; tileX += 1) {
+            if (tileX < 0 || tileY < 0 || tileX >= worldTiles || tileY >= worldTiles) continue;
+            jobs.push(new Promise(resolve => {
+              const image = new Image();
+              image.decoding = "async";
+              image.onload = () => {
+                const tileLeft = tileX * TILE_SIZE;
+                const tileTop = tileY * TILE_SIZE;
+                const sourceLeft = Math.max(sourceTopLeft.x, tileLeft);
+                const sourceTop = Math.max(sourceTopLeft.y, tileTop);
+                const sourceRight = Math.min(sourceBottomRight.x, tileLeft + TILE_SIZE);
+                const sourceBottom = Math.min(sourceBottomRight.y, tileTop + TILE_SIZE);
+                const destinationLeft = (sourceLeft - sourceTopLeft.x) / sourceWidth * renderWidth;
+                const destinationTop = (sourceTop - sourceTopLeft.y) / sourceHeight * renderHeight;
+                const destinationWidth = (sourceRight - sourceLeft) / sourceWidth * renderWidth;
+                const destinationHeight = (sourceBottom - sourceTop) / sourceHeight * renderHeight;
+                context.drawImage(
+                  image,
+                  sourceLeft - tileLeft,
+                  sourceTop - tileTop,
+                  sourceRight - sourceLeft,
+                  sourceBottom - sourceTop,
+                  destinationLeft,
+                  destinationTop,
+                  destinationWidth + 0.25,
+                  destinationHeight + 0.25
+                );
+                resolve();
+              };
+              image.onerror = resolve;
+              image.src = `/hd-tiles/${sourceZoom}/${tileX}/${tileY}.webp`;
+            }));
+          }
+        }
+
+        Promise.all(jobs).then(() => done(null, canvas));
+        return canvas;
+      }
+    });
+
+    return new HdSatelliteGrid({
+      minZoom: data.map.minZoom,
+      maxZoom: data.map.maxZoom,
+      tileSize: TILE_SIZE,
+      noWrap: true,
+      keepBuffer: 3,
+      updateWhenZooming: false,
+      updateWhenIdle: true,
+      attribution: "HD map tiles © Piggyback / CD PROJEKT RED"
+    });
+  }
+
+  function createBasemapProviders() {
+    const sharedOptions = {
+      minZoom: data.map.minZoom,
+      maxZoom: data.map.maxZoom,
+      maxNativeZoom: data.map.maxNativeZoom,
+      noWrap: true,
+      keepBuffer: 4,
+      updateWhenZooming: false,
+      updateWhenIdle: true
+    };
+    return new Map([
+      ["map", { id: "map", layer: L.tileLayer(data.map.tilesets[0], { ...sharedOptions, attribution: "Map tiles © MapGenie" }) }],
+      ["satellite", { id: "satellite", layer: L.tileLayer(data.map.tilesets[1], { ...sharedOptions, attribution: "Satellite tiles © MapGenie" }) }],
+      ["hdSatellite", { id: "hdSatellite", layer: createHdSatelliteLayer() }]
+    ]);
   }
 
   function openMarkerDialog(item = null, latlng = null) {
@@ -738,8 +856,9 @@
       savePreferences();
       renderMarkers();
     }));
-    $("#defaultLayerButton").addEventListener("click", () => setLayer(0));
-    $("#satelliteLayerButton").addEventListener("click", () => setLayer(1));
+    document.querySelectorAll("[data-basemap]").forEach(button => {
+      button.addEventListener("click", () => setLayer(button.dataset.basemap));
+    });
     $("#closeDetails").addEventListener("click", () => { focusRequest += 1; closeDetails(); });
     $("#detailDescription").addEventListener("click", event => {
       const foundToggle = event.target.closest("[data-found-location-id]");
@@ -841,17 +960,10 @@
       map.createPane("regionLabels");
       map.getPane("regionLabels").style.zIndex = "360";
       map.getPane("regionLabels").style.pointerEvents = "none";
-      tileLayers = data.map.tilesets.map((url, index) => L.tileLayer(url, {
-        minZoom: data.map.minZoom, maxZoom: data.map.maxZoom, maxNativeZoom: data.map.maxNativeZoom,
-        noWrap: true,
-        keepBuffer: 4,
-        updateWhenZooming: false,
-        updateWhenIdle: true,
-        attribution: index === 0 ? "Map tiles © MapGenie" : "Satellite tiles © MapGenie"
-      }));
+      basemapProviders = createBasemapProviders();
       regionLayer = L.layerGroup().addTo(map);
       displayLayer = L.layerGroup().addTo(map);
-      setLayer(Number(state.layer) === 1 ? 1 : 0);
+      setLayer(state.layer);
       refreshEntries();
 
       $("#customType").innerHTML = `<option value="custom">Custom marker</option>${leafTypes.map(type => `<option value="${type.slug}">${escapeHtml(type.name)}</option>`).join("")}`;

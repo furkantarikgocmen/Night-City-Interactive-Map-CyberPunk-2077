@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#111318" />
   <title>Cyberpunk 2077 — Night City Map</title>
   <link rel="stylesheet" href="assets/vendor/leaflet/leaflet.css" />
-  <link rel="stylesheet" href="assets/css/styles.css?v=19" />
+  <link rel="stylesheet" href="assets/css/styles.css?v=20" />
 </head>
 <body>
   <div id="app">
@@ -62,8 +62,9 @@
       <div id="map" aria-label="Night City interactive map"></div>
       <div class="map-topbar">
         <div class="layer-switch" role="group" aria-label="Harita katmanı">
-          <button id="defaultLayerButton" class="active">Map</button>
-          <button id="satelliteLayerButton">Satellite</button>
+          <button class="active" data-basemap="map">Map</button>
+          <button data-basemap="satellite" title="Evening satellite view">Evening</button>
+          <button data-basemap="hdSatellite" title="Morning satellite view">Morning</button>
         </div>
         <span id="visibleLabel" class="visible-label">0 locations</span>
       </div>
@@ -115,6 +116,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="assets/vendor/leaflet/leaflet.js"></script>
-  <script src="assets/js/app.js?v=24"></script>
+  <script src="assets/js/app.js?v=26"></script>
 </body>
 </html>

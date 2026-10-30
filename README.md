@@ -2,7 +2,7 @@
 
 A self-hosted interactive map for Cyberpunk 2077 collectors who want to track everything they discover across Night City without a subscription or an arbitrary found-item limit.
 
-The application includes 2,651 locations across 52 marker types, rich location descriptions with cross-map navigation, category filters, text search, standard and satellite map layers, persistent found status, custom markers, and JSON backup/restore.
+The application includes 2,651 locations across 52 marker types, rich location descriptions with cross-map navigation, category filters, text search, three switchable map views, persistent found status, custom markers, and JSON backup/restore.
 
 > [!IMPORTANT]
 > ### A note to the developers at MapGenie and IGN
@@ -23,7 +23,7 @@ Upstream map-data refreshes are reviewed and documented before they are merged. 
 
 ![Night City map with district boundaries, labels, and category filters](docs/screenshots/map-view.png)
 
-### Satellite layer with the missing-locations filter
+### Evening satellite view with the missing-locations filter
 
 ![Night City satellite map showing missing locations](docs/screenshots/satellite-view.png)
 
@@ -37,7 +37,7 @@ Upstream map-data refreshes are reviewed and documented before they are merged. 
 
 ## Features
 
-- Interactive Night City map with standard and satellite layers
+- Three switchable basemaps: the standard map, an Evening satellite view, and a brighter Morning satellite view
 - Zoom-aware region and district boundaries with map labels
 - 2,651 built-in locations organized into 52 marker types
 - Rich location descriptions and clickable links between related locations
@@ -193,12 +193,14 @@ It deterministically regenerates `assets/data/map-data.json`, `assets/data/locat
 | Component | Purpose |
 | --- | --- |
 | Traefik | Terminates TLS, obtains and renews Let's Encrypt certificates, redirects HTTP to HTTPS, and serves HTTP/2 |
-| Nginx | Serves the frontend, local map details, and marker data, and proxies `/api` requests on the private Docker network |
+| Nginx | Serves the frontend, local map details, and marker data; proxies `/api` on the private Docker network; and caches the Morning tile proxy in the browser |
 | Python service | Provides the small REST API using only the Python standard library |
 | SQLite | Stores found locations and custom markers |
 | Docker Compose | Runs the frontend and API services and manages persistent storage |
 
-In TLS mode, Traefik exposes public ports `80` and `443`. Nginx also binds to `127.0.0.1:8081` for host-local access, while the API remains available only on the private Docker network. The frontend, API, marker data, and marker sprite are served locally. Map tile images are requested from `tiles.mapgenie.io`, so displaying the map background currently requires an internet connection.
+In TLS mode, Traefik exposes public ports `80` and `443`. Nginx also binds to `127.0.0.1:8081` for host-local access, while the API remains available only on the private Docker network. The frontend, API, marker data, and marker sprite are served locally.
+
+The standard and Evening backgrounds use MapGenie tiles. The Morning view uses Piggyback/CD PROJEKT RED WebP tiles adapted to the existing marker coordinate system and routed through Nginx with long-lived browser caching. All markers, districts, filters, popups, and progress data remain on the same application map when switching views. Loading any background layer requires internet access to its upstream tile service.
 
 ## Verify TLS and HTTP/2
 
