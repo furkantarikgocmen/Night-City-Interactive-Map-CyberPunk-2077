@@ -841,7 +841,20 @@
     } catch (error) { showToast(error.message); }
   }
 
+  function configureAdaptiveWheelZoom() {
+    let precisionGestureUntil = 0;
+    map.getContainer().addEventListener("wheel", event => {
+      const now = performance.now();
+      const delta = Math.abs(event.deltaY);
+      const looksLikePrecisionInput = event.deltaMode === WheelEvent.DOM_DELTA_PIXEL
+        && (delta < 50 || !Number.isInteger(event.deltaY));
+      if (looksLikePrecisionInput) precisionGestureUntil = now + 180;
+      map.options.wheelPxPerZoomLevel = now < precisionGestureUntil ? 40 : 90;
+    }, { capture: true, passive: true });
+  }
+
   function bindEvents() {
+    configureAdaptiveWheelZoom();
     map.on("zoomend", renderRegions);
     map.on("moveend", renderViewportMarkers);
     elements.search.addEventListener("input", renderMarkers);
@@ -933,8 +946,8 @@
         zoomControl: true,
         preferCanvas: true,
         zoomSnap: 0.125,
-        zoomDelta: 0.25,
-        wheelPxPerZoomLevel: 160,
+        zoomDelta: 1,
+        wheelPxPerZoomLevel: 90,
         wheelDebounceTime: 16
       })
         .setView([data.map.initialLat, data.map.initialLng], Math.min(data.map.maxZoom, data.map.initialZoom + 2));
