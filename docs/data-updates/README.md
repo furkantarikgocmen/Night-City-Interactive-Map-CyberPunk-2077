@@ -4,6 +4,7 @@ Each upstream map-data refresh is documented in this directory before it is comm
 
 ## Updates
 
+- [2026-11-02](2026-11-02.md) — 15 new locations covering Phantom Liberty jobs, airdrops, tarot cards, an iconic weapon, and two Easter eggs
 - [2026-10-30](2026-10-30.md) — 14 new locations, including seven Phantom Liberty main jobs, six vehicle contracts, and the Page of Swords tarot card
 - [2026-10-28](2026-10-28.md) — 15 new locations, including Clampdown and the Night City Prison/BD Therapy cluster
 - [2026-10-26](2026-10-26.md) — 46 additions, one removal, Glamdoc, and the v11 marker sprite

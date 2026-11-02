@@ -2,7 +2,7 @@
 
 A self-hosted interactive map for Cyberpunk 2077 collectors who want to track everything they discover across Night City without a subscription or an arbitrary found-item limit.
 
-The application includes 2,651 locations across 52 marker types, rich location descriptions with cross-map navigation, category filters, text search, three switchable map views, persistent found status, custom markers, and JSON backup/restore.
+The application includes 2,666 locations across 52 marker types, rich location descriptions with cross-map navigation, category filters, text search, three switchable map views, persistent found status, custom markers, and JSON backup/restore.
 
 > [!IMPORTANT]
 > ### A note to the developers at MapGenie and IGN
@@ -14,7 +14,7 @@ The application includes 2,651 locations across 52 marker types, rich location d
 
 Upstream map-data refreshes are reviewed and documented before they are merged. Each dated report lists every added and removed location, changed descriptions and categories, sprite changes, validation results, and any known compatibility issues.
 
-- [Latest update: October 30, 2026](docs/data-updates/2026-10-30.md) — 14 locations added, including seven Phantom Liberty main jobs, six vehicle contracts, and the Page of Swords tarot card
+- [Latest update: November 2, 2026](docs/data-updates/2026-11-02.md) — 15 locations added, including Phantom Liberty jobs, airdrops, tarot cards, an iconic weapon, and two Easter eggs
 - [Update history and documentation format](docs/data-updates/README.md)
 
 ## Screenshots
@@ -39,7 +39,7 @@ Upstream map-data refreshes are reviewed and documented before they are merged. 
 
 - Three switchable basemaps: the standard map, an Evening satellite view, and a brighter Morning satellite view
 - Zoom-aware region and district boundaries with map labels
-- 2,651 built-in locations organized into 52 marker types
+- 2,666 built-in locations organized into 52 marker types
 - Rich location descriptions and clickable links between related locations
 - Inline collected/missing status and one-click progress controls for related loot
 - Search, category, and progress filters with All, Found-only, Missing-only, and Cleanup views
